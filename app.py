@@ -1,0 +1,3002 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import pyodbc
+import pandas as pd
+from datetime import datetime
+import json
+
+app = Flask(__name__)
+CORS(app)
+
+# --- MSSQL Bağlantı Ayarları ---
+SERVER_NAME = r'DESKTOP-GVRQ3CP'
+DATABASE_NAME = r'mobil_takip_db'
+DRIVER_NAME = r'ODBC Driver 11 for SQL Server'
+
+# Ana sunucuya bağlanmak için (veritabanı oluşturma işlemleri için)
+master_connection_string = (
+    f'DRIVER={{{DRIVER_NAME}}};'
+    f'SERVER={SERVER_NAME};'
+    f'DATABASE=master;'
+    f'Trusted_Connection=yes;'
+    f'TrustServerCertificate=yes;'
+    f'Encrypt=no;'
+)
+
+# Uygulamanın kullanacağı ana veritabanı bağlantısı
+connection_string = (
+    f'DRIVER={{{DRIVER_NAME}}};'
+    f'SERVER={SERVER_NAME};'
+    f'DATABASE={DATABASE_NAME};'
+    f'Trusted_Connection=yes;'
+    f'TrustServerCertificate=yes;'
+    f'Encrypt=no;'
+)
+
+def get_db_connection():
+    """Veritabanı bağlantısı oluşturur."""
+    try:
+        conn = pyodbc.connect(connection_string)
+        return conn
+    except Exception as e:
+        print(f"Veritabanı bağlantı hatası: {e}")
+        return None
+
+def test_connection():
+    """Bağlantıyı test eder ve sunucu bilgilerini gösterir"""
+    conn = get_db_connection()
+    if not conn:
+        print("Bağlantı test edilemedi.")
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT @@VERSION")
+        version = cursor.fetchone()[0]
+        print(f"SQL Server Version: {version}")
+        
+        cursor.execute("SELECT DB_NAME()")
+        db_name = cursor.fetchone()[0]
+        print(f"Current Database: {db_name}")
+        
+        cursor.execute("SELECT SYSTEM_USER")
+        user = cursor.fetchone()[0]
+        print(f"Connected as: {user}")
+        
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Bağlantı testi hatası: {e}")
+        return False
+
+def initialize_db():
+    """Veritabanını ve gerekli tabloları oluşturur/kontrol eder."""
+    try:
+        # Adım 1: Veritabanının varlığını kontrol et ve gerekirse oluştur.
+        print("Veritabanı varlığı kontrol ediliyor...")
+        master_conn = pyodbc.connect(master_connection_string, autocommit=True)
+        cursor = master_conn.cursor()
+        cursor.execute(f"SELECT name FROM sys.databases WHERE name = '{DATABASE_NAME}'")
+        if cursor.fetchone() is None:
+            print(f"'{DATABASE_NAME}' veritabanı bulunamadı. Oluşturuluyor...")
+            cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
+            print(f"Veritabanı '{DATABASE_NAME}' başarıyla oluşturuldu.")
+        else:
+            print(f"Veritabanı '{DATABASE_NAME}' zaten mevcut.")
+        cursor.close()
+        master_conn.close()
+    except Exception as e:
+        print(f"Veritabanı kontrol/oluşturma hatası: {e}")
+        return False
+
+    # Adım 2: Tabloları oluştur.
+    print("Tablolar kontrol ediliyor...")
+    conn = get_db_connection()
+    if not conn:
+        print("Tablolar oluşturulamadı. Veritabanı bağlantısı yok.")
+        return False
+
+    cursor = conn.cursor()
+
+    try:
+        # Kullanıcılar tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' and xtype='U')
+        CREATE TABLE users (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            email NVARCHAR(100) UNIQUE NOT NULL,
+            password NVARCHAR(100) NOT NULL,
+            name NVARCHAR(100),
+            surname NVARCHAR(100)
+        )
+        """)
+
+        # fcv_genel Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='fcv_genel' and xtype='U')
+        CREATE TABLE fcv_genel (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            firinNo INT,
+            tarla NVARCHAR(255),
+            turSayisi INT,
+            gTarih DATE,
+            cTarih DATE,
+            yasKg FLOAT,
+            kuruKg FLOAT,
+            ortalama FLOAT,
+            koliSayisi INT,
+            yakitToplam FLOAT,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        """)
+
+        # --- FCV Kırım Tabloları (YENİ YAPI) ---
+        # Önceki fcv_kirim tablosunu güvenli bir şekilde kaldır.
+        cursor.execute("IF OBJECT_ID('fcv_kirim', 'U') IS NOT NULL DROP TABLE fcv_kirim")
+        
+        # Ağırlıkların tutulacağı detay tablosu (önce bunu kaldırıyoruz FK nedeniyle)
+        cursor.execute("IF OBJECT_ID('fcv_kirim_agirlik', 'U') IS NOT NULL DROP TABLE fcv_kirim_agirlik")
+        
+        # Günlük özetlerin tutulacağı ana tablo (sonra bunu kaldırıyoruz)
+        cursor.execute("IF OBJECT_ID('fcv_kirim_gunluk', 'U') IS NOT NULL DROP TABLE fcv_kirim_gunluk")
+        
+        # Günlük Özet Tablosu
+        cursor.execute("""
+        CREATE TABLE fcv_kirim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            userId INT NOT NULL,
+            tarih DATE NOT NULL,
+            bocaSayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_user_tarih UNIQUE (userId, tarih),
+            CONSTRAINT FK_gunluk_users FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """)
+        
+        # Ağırlık Detay Tablosu
+        cursor.execute("""
+        CREATE TABLE fcv_kirim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            gunlukId INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_agirlik_gunluk FOREIGN KEY (gunlukId) REFERENCES fcv_kirim_gunluk(id) ON DELETE CASCADE
+        )
+        """)
+
+        # Diğer tablolar
+        other_page_tables = [
+            "fcv_bakim", "fcv_rask_dolum",
+            "izmir_dizim", "izmir_genel", "izmir_kirim", "izmir_kutulama",
+            "jti_scv_dizim", "jti_scv_genel", "jti_scv_kirim", "jti_scv_kutulama",
+            "pmi_scv_dizim", "pmi_scv_genel", "pmi_scv_kirim", "pmi_scv_kutulama",
+            "pmi_topping_dizim", "pmi_topping_genel", "pmi_topping_kirim", "pmi_topping_kutulama"
+        ]
+        
+        for table_name in other_page_tables:
+            cursor.execute(f"""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{table_name}' and xtype='U')
+            CREATE TABLE {table_name} (
+                id INT PRIMARY KEY IDENTITY(1,1),
+                placeholder_col NVARCHAR(100)
+            )
+            """)
+
+        # İzmir Kırım Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kirim_gunluk' and xtype='U')
+        CREATE TABLE izmir_kirim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            bohcaSayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_izmir_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # İzmir Kırım Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kirim_agirlik' and xtype='U')
+        CREATE TABLE izmir_kirim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            gunlukId INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_izmir_agirlik_gunluk FOREIGN KEY (gunlukId) REFERENCES izmir_kirim_gunluk(id) ON DELETE CASCADE
+        )
+        """)
+
+        # SCV Sera Yerleri Tablosu (yeni)
+        cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_sera_yerleri' and xtype='U')
+        CREATE TABLE scv_sera_yerleri (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            sera_yeri NVARCHAR(100) UNIQUE NOT NULL,
+            toplam_sera_sayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        ''')
+
+        # SCV Sera Tablosu (güncel)
+        cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_sera' and xtype='U')
+        CREATE TABLE scv_sera (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            sera_yeri NVARCHAR(100),
+            alan NVARCHAR(100),
+            sera_no NVARCHAR(100),
+            dizi_sayisi INT,
+            dizi_kg1 FLOAT,
+            dizi_kg2 FLOAT,
+            dizi_kg3 FLOAT,
+            dizi_kg4 FLOAT,
+            dizi_kg5 FLOAT,
+            dizi_kg6 FLOAT,
+            bosaltma_tarihi DATETIME NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        ''')
+        # Eğer tablo zaten varsa, bosaltma_tarihi kolonu yoksa ekle
+        try:
+            cursor.execute("ALTER TABLE scv_sera ADD bosaltma_tarihi DATETIME NULL")
+        except Exception as e:
+            pass  # Zaten varsa hata verir, görmezden gel
+
+        # SCV Kutulama Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_kutulama' and xtype='U')
+        CREATE TABLE scv_kutulama (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            sera_yeri NVARCHAR(100) NOT NULL,
+            sera_no NVARCHAR(50) NOT NULL,
+            sera_yas_kg FLOAT NOT NULL,
+            kutular NVARCHAR(MAX), -- JSON formatında kutu kg'leri
+            toplam_kuru_kg FLOAT NOT NULL,
+            yas_kuru_orani FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        """)
+
+        # --- İzmir Sera Yerleri Tablosu (yeni) ---
+        cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_sera_yerleri' and xtype='U')
+        CREATE TABLE izmir_sera_yerleri (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            sera_yeri NVARCHAR(100) UNIQUE NOT NULL,
+            toplam_sera_sayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        ''')
+
+        # --- İzmir Sera Tablosu ---
+        cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_sera' and xtype='U')
+        CREATE TABLE izmir_sera (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            sera_yeri NVARCHAR(100),
+            sera_no NVARCHAR(100),
+            dizi_sayisi INT,
+            dizi_kg1 FLOAT,
+            dizi_kg2 FLOAT,
+            dizi_kg3 FLOAT,
+            dizi_kg4 FLOAT,
+            dizi_kg5 FLOAT,
+            dizi_kg6 FLOAT,
+            bosaltma_tarihi DATETIME NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        ''')
+        try:
+            cursor.execute("ALTER TABLE izmir_sera ADD bosaltma_tarihi DATETIME NULL")
+        except Exception as e:
+            pass
+
+        # --- İzmir Kutulama Tablosu ---
+        cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kutulama' and xtype='U')
+        CREATE TABLE izmir_kutulama (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE,
+            dayibasi NVARCHAR(100),
+            sera_yeri NVARCHAR(100),
+            sera_no NVARCHAR(100),
+            sera_yas_kg FLOAT,
+            kutular NVARCHAR(MAX),
+            toplam_kuru_kg FLOAT,
+            yas_kuru_orani FLOAT,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+        ''')
+
+        # --- JTI SCV KIRIM Tabloları ---
+        # JTI SCV KIRIM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_dayibasi_table' and xtype='U')
+        CREATE TABLE jti_scv_kirim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_jti_scv_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # JTI SCV KIRIM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_gunluk' and xtype='U')
+        CREATE TABLE jti_scv_kirim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            bohcaSayisi INT NOT NULL,
+            agirlik_id INT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+        
+        # Eğer tablo zaten varsa, agirlik_id kolonunu NULL yapılabilir hale getir
+        try:
+            cursor.execute("ALTER TABLE jti_scv_kirim_gunluk ALTER COLUMN agirlik_id INT NULL")
+        except Exception as e:
+            pass  # Zaten NULL ise hata verir, görmezden gel
+
+        # JTI SCV KIRIM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_agirlik' and xtype='U')
+        CREATE TABLE jti_scv_kirim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- JTI SCV DİZİM Tabloları ---
+        # JTI SCV DİZİM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_dayibasi_table' and xtype='U')
+        CREATE TABLE jti_scv_dizim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_jti_scv_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # JTI SCV DİZİM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_gunluk' and xtype='U')
+        CREATE TABLE jti_scv_dizim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            diziAdedi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # JTI SCV DİZİM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_agirlik' and xtype='U')
+        CREATE TABLE jti_scv_dizim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            yaprakSayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- JTI SCV KUTULAMA Tabloları ---
+        # JTI SCV KUTULAMA Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_dayibasi_table' and xtype='U')
+        CREATE TABLE jti_scv_kutulama_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_jti_scv_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # JTI SCV KUTULAMA Kuru Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_kuru_kg' and xtype='U')
+        CREATE TABLE jti_scv_kutulama_kuru_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # JTI SCV KUTULAMA Sera Yaş Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_sera_yas_kg' and xtype='U')
+        CREATE TABLE jti_scv_kutulama_sera_yas_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_jti_scv_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI SCV KIRIM Tabloları ---
+        # PMI SCV KIRIM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_scv_kirim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_scv_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI SCV KIRIM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_gunluk' and xtype='U')
+        CREATE TABLE pmi_scv_kirim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            bohcaSayisi INT NOT NULL,
+            agirlik_id INT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI SCV KIRIM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_agirlik' and xtype='U')
+        CREATE TABLE pmi_scv_kirim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI SCV DİZİM Tabloları ---
+        # PMI SCV DİZİM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_scv_dizim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_scv_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI SCV DİZİM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_gunluk' and xtype='U')
+        CREATE TABLE pmi_scv_dizim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            diziAdedi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI SCV DİZİM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_agirlik' and xtype='U')
+        CREATE TABLE pmi_scv_dizim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            yaprakSayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI SCV KUTULAMA Tabloları ---
+        # PMI SCV KUTULAMA Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_scv_kutulama_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_scv_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI SCV KUTULAMA Kuru Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_kuru_kg' and xtype='U')
+        CREATE TABLE pmi_scv_kutulama_kuru_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI SCV KUTULAMA Sera Yaş Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_sera_yas_kg' and xtype='U')
+        CREATE TABLE pmi_scv_kutulama_sera_yas_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_scv_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI TOPPING KIRIM Tabloları ---
+        # PMI TOPPING KIRIM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_topping_kirim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_topping_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI TOPPING KIRIM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_gunluk' and xtype='U')
+        CREATE TABLE pmi_topping_kirim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            bohcaSayisi INT NOT NULL,
+            agirlik_id INT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI TOPPING KIRIM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_agirlik' and xtype='U')
+        CREATE TABLE pmi_topping_kirim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI TOPPING DİZİM Tabloları ---
+        # PMI TOPPING DİZİM Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_topping_dizim_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_topping_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI TOPPING DİZİM Günlük Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_gunluk' and xtype='U')
+        CREATE TABLE pmi_topping_dizim_gunluk (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            diziAdedi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI TOPPING DİZİM Ağırlık Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_agirlik' and xtype='U')
+        CREATE TABLE pmi_topping_dizim_agirlik (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            agirlik FLOAT NOT NULL,
+            yaprakSayisi INT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # --- PMI TOPPING KUTULAMA Tabloları ---
+        # PMI TOPPING KUTULAMA Dayıbaşı Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_dayibasi_table' and xtype='U')
+        CREATE TABLE pmi_topping_kutulama_dayibasi_table (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            tarih DATE NOT NULL,
+            dayibasi NVARCHAR(100) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT UQ_pmi_topping_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
+        )
+        """)
+
+        # PMI TOPPING KUTULAMA Kuru Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_kuru_kg' and xtype='U')
+        CREATE TABLE pmi_topping_kutulama_kuru_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        # PMI TOPPING KUTULAMA Sera Yaş Kg Tablosu
+        cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_sera_yas_kg' and xtype='U')
+        CREATE TABLE pmi_topping_kutulama_sera_yas_kg (
+            id INT PRIMARY KEY IDENTITY(1,1),
+            dayibasi_id INT NOT NULL,
+            value FLOAT NOT NULL,
+            created_at DATETIME DEFAULT GETDATE(),
+            CONSTRAINT FK_pmi_topping_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        )
+        """)
+
+        conn.commit()
+        print("✅ Veritabanı tabloları başarıyla kontrol edildi/oluşturuldu.")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Tablo oluşturma hatası: {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+def ensure_kutulama_alan_column():
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (alan sütunu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        # Sütun var mı kontrol et
+        cursor.execute("""
+            SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = 'scv_kutulama' AND COLUMN_NAME = 'alan'
+        """)
+        exists = cursor.fetchone()[0]
+        if not exists:
+            print("'scv_kutulama' tablosuna 'alan' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE scv_kutulama ADD alan NVARCHAR(100) NULL")
+            conn.commit()
+            print("'alan' sütunu eklendi.")
+        else:
+            print("'alan' sütunu zaten var.")
+    except Exception as e:
+        print(f"'alan' sütunu eklenirken hata: {e}")
+    finally:
+        conn.close()
+
+# --- API Endpointleri ---
+#-----------------------------------------------------------------------------------------------
+@app.route('/api/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    name = data.get('name')
+    surname = data.get('surname')
+
+    if not email or not password or not name or not surname:
+        return jsonify({'message': 'Tüm alanlar zorunludur: email, şifre, ad ve soyad.'}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", email, password, name, surname)
+        conn.commit()
+        return jsonify({'message': 'Kayıt başarılı.'}), 201
+    except pyodbc.IntegrityError:
+        return jsonify({'message': 'Bu email zaten kayıtlı.'}), 409
+    except Exception as e:
+        return jsonify({'message': f'Sunucu hatası: {e}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'message': 'Email ve şifre gerekli.'}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, name, surname FROM users WHERE email = ? AND password = ?", email, password)
+    user = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if user:
+        user_data = {'id': user.id, 'email': user.email, 'name': user.name, 'surname': user.surname}
+        return jsonify({'message': 'Giriş başarılı.', 'user': user_data})
+    else:
+        return jsonify({'message': 'Email veya şifre hatalı.'}), 401
+
+# --- FCV Genel API Endpointleri ---
+#-----------------------------------------------------------------------------------------------------
+@app.route('/api/fcv_genel', methods=['POST'])
+def add_fcv_genel_data():
+    data = request.get_json()
+    
+    # Gerekli tüm alanların gelip gelmediğini kontrol et
+    required_fields = ['firinNo', 'tarla', 'turSayisi', 'gTarih', 'cTarih', 'yasKg', 'kuruKg', 'ortalama', 'koliSayisi', 'yakitToplam']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        sql = """INSERT INTO fcv_genel (firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        params = (
+            data['firinNo'], data['tarla'], data['turSayisi'], data['gTarih'], data['cTarih'],
+            data['yasKg'], data['kuruKg'], data['ortalama'], data['koliSayisi'], data['yakitToplam']
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Veri başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/fcv_genel', methods=['GET'])
+def get_fcv_genel_data():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel ORDER BY id DESC")
+        
+        # Sütun adlarını al
+        columns = [column[0] for column in cursor.description]
+        # Sonuçları dict listesine çevir
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- FCV Kırım API Endpointleri (YENİ YAPI) ---
+#-----------------------------------------------------------------------------------------------------
+@app.route('/api/fcv_kirim/summary', methods=['GET'])
+def get_kirim_summary():
+    tarih = request.args.get('tarih')
+    user_id = request.args.get('userId')
+    # Tarih parametresi opsiyonel, verilmezse tüm kayıtlar gelir
+    sql = '''
+        SELECT 
+            u.id as userId,
+            u.name,
+            u.surname,
+            g.id as gunlukId,
+            g.tarih,
+            g.bocaSayisi,
+            (SELECT COUNT(a.id) FROM fcv_kirim_agirlik a WHERE a.gunlukId = g.id) as girilenAgirlikSayisi,
+            (SELECT AVG(a.agirlik) FROM fcv_kirim_agirlik a WHERE a.gunlukId = g.id) as ortalamaAgirlik
+        FROM users u
+        JOIN fcv_kirim_gunluk g ON u.id = g.userId
+        WHERE 1=1
+    '''
+    params = []
+    if tarih:
+        sql += ' AND g.tarih = ?'
+        params.append(tarih)
+    if user_id:
+        sql += ' AND u.id = ?'
+        params.append(user_id)
+    sql += ' ORDER BY g.tarih DESC, u.name, u.surname'
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['bocaSayisi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bocaSayisi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/fcv_kirim/gunluk', methods=['POST'])
+def add_or_update_gunluk_entry():
+    """Bir kullanıcı ve tarih için günlük girişi ekler veya günceller."""
+    data = request.get_json()
+    required = ['userId', 'tarih', 'bocaSayisi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'userId, tarih ve bocaSayisi zorunludur.'}), 400
+    
+    sql_check = "SELECT id FROM fcv_kirim_gunluk WHERE userId = ? AND tarih = ?"
+    sql_insert = "INSERT INTO fcv_kirim_gunluk (userId, tarih, bocaSayisi) VALUES (?, ?, ?)"
+    sql_update = "UPDATE fcv_kirim_gunluk SET bocaSayisi = ? WHERE id = ?"
+    
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['userId'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute(sql_update, data['bocaSayisi'], existing.id)
+        else:
+            cursor.execute(sql_insert, data['userId'], data['tarih'], data['bocaSayisi'])
+        conn.commit()
+        return jsonify({'message': 'Günlük giriş başarıyla kaydedildi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/fcv_kirim/agirlik', methods=['POST'])
+def add_agirlik_entry():
+    """Bir günlük kaydına yeni bir ağırlık ekler."""
+    data = request.get_json()
+    if not data.get('gunlukId') or not data.get('agirlik'):
+        return jsonify({'message': 'gunlukId ve agirlik zorunludur.'}), 400
+        
+    sql = "INSERT INTO fcv_kirim_agirlik (gunlukId, agirlik) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, data['gunlukId'], data['agirlik'])
+        conn.commit()
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/fcv_kirim/agirlik/details', methods=['GET'])
+def get_agirlik_details_by_gunlukId():
+    """Bir gunlukId'ye ait tüm ağırlık girişlerini döner."""
+    gunluk_id = request.args.get('gunlukId')
+    if not gunluk_id:
+        return jsonify({'message': 'gunlukId parametresi zorunludur.'}), 400
+        
+    sql = "SELECT id, agirlik, created_at FROM fcv_kirim_agirlik WHERE gunlukId = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, gunluk_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/fcv_kirim/agirlik/<int:agirlik_id>', methods=['DELETE'])
+def delete_agirlik_entry(agirlik_id):
+    """Bir ağırlık girişini siler."""
+    sql = "DELETE FROM fcv_kirim_agirlik WHERE id = ?"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, agirlik_id)
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Ağırlık başarıyla silindi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/users', methods=['GET'])
+def get_users():
+    """Tüm kullanıcıları (dayıbaşıları) döner."""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, surname FROM users ORDER BY name, surname")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- İzmir Kırım API Endpointleri ---
+#-----------------------------------------------------------------------------------------------------
+@app.route('/api/izmir_kirim/summary', methods=['GET'])
+def get_izmir_kirim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.bohcaSayisi,
+                g.agirlik_id,
+                (SELECT COUNT(a.id) FROM izmir_kirim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM izmir_kirim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM izmir_kirim_dayibasi_table d
+            LEFT JOIN izmir_kirim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        """)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['bohcaSayisi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kirim/gunluk', methods=['POST'])
+def add_or_update_izmir_kirim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    bohcaSayisi = data.get('bohcaSayisi')
+    agirlik_id = data.get('agirlik_id')  # opsiyonel
+
+    if not dayibasi_id or bohcaSayisi is None:
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Kayıt var mı kontrol et
+        cursor.execute("SELECT id FROM izmir_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            if agirlik_id:
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+            else:
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Günlük güncellendi.'}), 200
+        else:
+            if agirlik_id:
+                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+            else:
+                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi) VALUES (?, ?)", dayibasi_id, bohcaSayisi)
+            conn.commit()
+            return jsonify({'message': 'Günlük eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kirim/agirlik', methods=['POST'])
+def add_izmir_kirim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO izmir_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kirim/agirlik/details', methods=['GET'])
+def get_izmir_kirim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, created_at FROM izmir_kirim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kirim/dayibasi', methods=['POST'])
+def add_izmir_kirim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+
+    sql_check = "SELECT id FROM izmir_kirim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO izmir_kirim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+#--İzmir dizim api endpointleri----
+
+@app.route('/api/izmir_dizim/summary', methods=['GET'])
+def get_izmir_dizim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.diziAdedi,
+                (SELECT COUNT(a.id) FROM izmir_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM izmir_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM izmir_dizim_dayibasi_table d
+            LEFT JOIN izmir_dizim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['diziAdedi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_dizim/dayibasi', methods=['POST'])
+def add_izmir_dizim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM izmir_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO izmir_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_dizim/agirlik', methods=['POST'])
+def add_izmir_dizim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yaprakSayisi = data.get('yaprakSayisi')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id or not yaprakSayisi:
+        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_dizim/agirlik/details', methods=['GET'])
+def get_izmir_dizim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM izmir_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_dizim/gunluk', methods=['POST'])
+def add_or_update_izmir_dizim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    if not dayibasi_id or diziAdedi is None:
+        return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM izmir_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+        else:
+            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#---izmir kutulama api endpointleri-----------
+#---izmir kutulama api endpointleri-----------
+
+@app.route('/api/izmir_kutulama/summary', methods=['GET'])
+def get_izmir_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM izmir_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            # Kuru kg listesi
+            cursor.execute("SELECT id, value FROM izmir_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            # Sera yaş kg listesi
+            cursor.execute("SELECT id, value FROM izmir_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kutulama/dayibasi', methods=['POST'])
+def add_izmir_kutulama_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM izmir_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO izmir_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kutulama/kuru_kg', methods=['POST'])
+def add_izmir_kutulama_kuru_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO izmir_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/izmir_kutulama/sera_yas_kg', methods=['POST'])
+def add_izmir_kutulama_sera_yas_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO izmir_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#------------------------------------------------------------------------------------------------------------
+#---scv jtı KIRIM api endpointleri-------
+@app.route('/api/jti_scv_kirim/summary', methods=['GET'])
+def get_jti_scv_kirim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.bohcaSayisi,
+                g.agirlik_id,
+                (SELECT COUNT(a.id) FROM jti_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM jti_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM jti_scv_kirim_dayibasi_table d
+            LEFT JOIN jti_scv_kirim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        """)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['bohcaSayisi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kirim/gunluk', methods=['POST'])
+def add_or_update_jti_scv_kirim_gunluk():
+    data = request.get_json()
+    print(f"JTI SCV KIRIM GUNLUK - Gelen veri: {data}")
+    
+    dayibasi_id = data.get('dayibasi_id')
+    bohcaSayisi = data.get('bohcaSayisi')
+    agirlik_id = data.get('agirlik_id')  # opsiyonel
+
+    print(f"dayibasi_id: {dayibasi_id}, bohcaSayisi: {bohcaSayisi}, agirlik_id: {agirlik_id}")
+
+    if not dayibasi_id or bohcaSayisi is None:
+        print("Eksik parametreler")
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: 
+        print("Veritabanı bağlantı hatası")
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        
+        # Önce dayibasi_id'nin mevcut olup olmadığını kontrol et
+        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", dayibasi_id)
+        dayibasi_exists = cursor.fetchone()
+        print(f"Dayıbaşı mevcut mu: {dayibasi_exists}")
+        
+        if not dayibasi_exists:
+            print(f"Dayıbaşı ID {dayibasi_id} bulunamadı")
+            return jsonify({'message': f'Dayıbaşı ID {dayibasi_id} bulunamadı. Önce dayıbaşı kaydı oluşturun.'}), 400
+        
+        # Kayıt var mı kontrol et
+        cursor.execute("SELECT id FROM jti_scv_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        print(f"Mevcut kayıt: {existing}")
+        
+        if existing:
+            if agirlik_id:
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+            else:
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+            conn.commit()
+            print("Günlük güncellendi")
+            return jsonify({'message': 'Günlük güncellendi.'}), 200
+        else:
+            if agirlik_id:
+                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+            else:
+                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+            conn.commit()
+            print("Günlük eklendi")
+            return jsonify({'message': 'Günlük eklendi.'}), 201
+    except Exception as e:
+        print(f"JTI SCV KIRIM GUNLUK - Hata: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kirim/agirlik', methods=['POST'])
+def add_jti_scv_kirim_agirlik():
+    data = request.get_json()
+    print(f"JTI SCV KIRIM AGIRLIK - Gelen veri: {data}")
+    
+    agirlik = data.get('agirlik')
+    dayibasi_id = data.get('dayibasi_id')
+    print(f"agirlik: {agirlik}, dayibasi_id: {dayibasi_id}")
+    
+    if not agirlik or not dayibasi_id:
+        print("Eksik parametreler")
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: 
+        print("Veritabanı bağlantı hatası")
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        
+        # Önce dayibasi_id'nin mevcut olup olmadığını kontrol et
+        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", dayibasi_id)
+        dayibasi_exists = cursor.fetchone()
+        print(f"Dayıbaşı mevcut mu: {dayibasi_exists}")
+        
+        if not dayibasi_exists:
+            print(f"Dayıbaşı ID {dayibasi_id} bulunamadı")
+            return jsonify({'message': f'Dayıbaşı ID {dayibasi_id} bulunamadı. Önce dayıbaşı kaydı oluşturun.'}), 400
+        
+        cursor.execute("INSERT INTO jti_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        conn.commit()
+        print("Ağırlık başarıyla eklendi")
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
+    except Exception as e:
+        print(f"JTI SCV KIRIM AGIRLIK - Hata: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kirim/agirlik/details', methods=['GET'])
+def get_jti_scv_kirim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, created_at FROM jti_scv_kirim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kirim/dayibasi', methods=['POST'])
+def add_jti_scv_kirim_dayibasi():
+    data = request.get_json()
+    print(f"JTI SCV KIRIM DAYIBASI - Gelen veri: {data}")
+    
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        print("Eksik parametreler")
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+
+    sql_check = "SELECT id FROM jti_scv_kirim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO jti_scv_kirim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: 
+        print("Veritabanı bağlantı hatası")
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        print(f"Mevcut dayıbaşı kaydı: {existing}")
+        
+        if existing:
+            print("Bu dayıbaşı ve tarihe ait kayıt zaten var")
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        print("Dayıbaşı kaydı başarıyla eklendi")
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        print(f"JTI SCV KIRIM DAYIBASI - Hata: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+
+
+#--scv jtı dizim api endpointleri-------------------------------------------------
+@app.route('/api/jti_scv_dizim/summary', methods=['GET'])
+def get_jti_scv_dizim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.diziAdedi,
+                (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM jti_scv_dizim_dayibasi_table d
+            LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['diziAdedi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_dizim/dayibasi', methods=['POST'])
+def add_jti_scv_dizim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM jti_scv_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO jti_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_dizim/agirlik', methods=['POST'])
+def add_jti_scv_dizim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yaprakSayisi = data.get('yaprakSayisi')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id or not yaprakSayisi:
+        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_dizim/agirlik/details', methods=['GET'])
+def get_jti_scv_dizim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_dizim/gunluk', methods=['POST'])
+def add_or_update_jti_scv_dizim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    if not dayibasi_id or diziAdedi is None:
+        return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+        else:
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+
+#-- scv jtı kutulama api endpointleri-----
+#-- scv jtı kutulama api endpointleri-----
+
+@app.route('/api/jti_scv_kutulama/summary', methods=['GET'])
+def get_jti_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM jti_scv_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kutulama/dayibasi', methods=['POST'])
+def add_jti_scv_kutulama_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM jti_scv_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO jti_scv_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kutulama/kuru_kg', methods=['POST'])
+def add_jti_scv_kutulama_kuru_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO jti_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/jti_scv_kutulama/sera_yas_kg', methods=['POST'])
+def add_jti_scv_kutulama_sera_yas_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO jti_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#------------------------------------------------------------------------------------------------------------
+#---scv pmı KIRIRM api endpointleri---------------
+@app.route('/api/pmi_scv_kirim/summary', methods=['GET'])
+def get_pmi_scv_kirim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.bohcaSayisi,
+                g.agirlik_id,
+                (SELECT COUNT(a.id) FROM pmi_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM pmi_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM pmi_scv_kirim_dayibasi_table d
+            LEFT JOIN pmi_scv_kirim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        """)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['bohcaSayisi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kirim/gunluk', methods=['POST'])
+def add_or_update_pmi_scv_kirim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    bohcaSayisi = data.get('bohcaSayisi')
+    agirlik_id = data.get('agirlik_id')  # opsiyonel
+
+    if not dayibasi_id or bohcaSayisi is None:
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Kayıt var mı kontrol et
+        cursor.execute("SELECT id FROM pmi_scv_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            if agirlik_id:
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+            else:
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Günlük güncellendi.'}), 200
+        else:
+            if agirlik_id:
+                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+            else:
+                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+            conn.commit()
+            return jsonify({'message': 'Günlük eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kirim/agirlik', methods=['POST'])
+def add_pmi_scv_kirim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kirim/agirlik/details', methods=['GET'])
+def get_pmi_scv_kirim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, created_at FROM pmi_scv_kirim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kirim/dayibasi', methods=['POST'])
+def add_pmi_scv_kirim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+
+    sql_check = "SELECT id FROM pmi_scv_kirim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_scv_kirim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+
+
+#--scv pmı dizim api endpointleri----
+@app.route('/api/pmi_scv_dizim/summary', methods=['GET'])
+def get_pmi_scv_dizim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.diziAdedi,
+                (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM pmi_scv_dizim_dayibasi_table d
+            LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['diziAdedi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_dizim/dayibasi', methods=['POST'])
+def add_pmi_scv_dizim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_scv_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_dizim/agirlik', methods=['POST'])
+def add_pmi_scv_dizim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yaprakSayisi = data.get('yaprakSayisi')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id or not yaprakSayisi:
+        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_dizim/agirlik/details', methods=['GET'])
+def get_pmi_scv_dizim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_dizim/gunluk', methods=['POST'])
+def add_or_update_pmi_scv_dizim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    if not dayibasi_id or diziAdedi is None:
+        return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+        else:
+            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#--scv pmı kutulama api endpointleri------
+#--scv pmı kutulama api endpointleri------
+
+@app.route('/api/pmi_scv_kutulama/summary', methods=['GET'])
+def get_pmi_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM pmi_scv_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kutulama/dayibasi', methods=['POST'])
+def add_pmi_scv_kutulama_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_scv_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_scv_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kutulama/kuru_kg', methods=['POST'])
+def add_pmi_scv_kutulama_kuru_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_scv_kutulama/sera_yas_kg', methods=['POST'])
+def add_pmi_scv_kutulama_sera_yas_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#-----------------------------------------------------------------------------------------------------------
+#------scv pmi KIRIM topping api endpointleri---------------------------
+@app.route('/api/pmi_topping_kirim/summary', methods=['GET'])
+def get_pmi_topping_kirim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.bohcaSayisi,
+                g.agirlik_id,
+                (SELECT COUNT(a.id) FROM pmi_topping_kirim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM pmi_topping_kirim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM pmi_topping_kirim_dayibasi_table d
+            LEFT JOIN pmi_topping_kirim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        """)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['bohcaSayisi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kirim/gunluk', methods=['POST'])
+def add_or_update_pmi_topping_kirim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    bohcaSayisi = data.get('bohcaSayisi')
+    agirlik_id = data.get('agirlik_id')  # opsiyonel
+
+    if not dayibasi_id or bohcaSayisi is None:
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Kayıt var mı kontrol et
+        cursor.execute("SELECT id FROM pmi_topping_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            if agirlik_id:
+                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+            else:
+                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Günlük güncellendi.'}), 200
+        else:
+            if agirlik_id:
+                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+            else:
+                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+            conn.commit()
+            return jsonify({'message': 'Günlük eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kirim/agirlik', methods=['POST'])
+def add_pmi_topping_kirim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_topping_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kirim/agirlik/details', methods=['GET'])
+def get_pmi_topping_kirim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, created_at FROM pmi_topping_kirim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kirim/dayibasi', methods=['POST'])
+def add_pmi_topping_kirim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+
+    sql_check = "SELECT id FROM pmi_topping_kirim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_topping_kirim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#------scv pmi topping dizim api endpointleri----
+
+@app.route('/api/pmi_topping_dizim/summary', methods=['GET'])
+def get_pmi_topping_dizim_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi,
+                g.id as gunluk_id,
+                g.diziAdedi,
+                (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+            FROM pmi_topping_dizim_dayibasi_table d
+            LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            if r['ortalamaAgirlik'] and r['diziAdedi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            else:
+                r['toplamTahminiKg'] = 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_dizim/dayibasi', methods=['POST'])
+def add_pmi_topping_dizim_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_topping_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_topping_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_dizim/agirlik', methods=['POST'])
+def add_pmi_topping_dizim_agirlik():
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yaprakSayisi = data.get('yaprakSayisi')
+    dayibasi_id = data.get('dayibasi_id')
+    if not agirlik or not dayibasi_id or not yaprakSayisi:
+        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        conn.commit()
+        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_dizim/agirlik/details', methods=['GET'])
+def get_pmi_topping_dizim_agirlik_details():
+    dayibasi_id = request.args.get('dayibasi_id')
+    if not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
+    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, dayibasi_id)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_dizim/gunluk', methods=['POST'])
+def add_or_update_pmi_topping_dizim_gunluk():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    if not dayibasi_id or diziAdedi is None:
+        return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        existing = cursor.fetchone()
+        if existing:
+            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+        else:
+            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            conn.commit()
+            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+#----- scv pmi topping kutulama api endpointleri---------
+
+@app.route('/api/pmi_topping_kutulama/summary', methods=['GET'])
+def get_pmi_topping_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM pmi_topping_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kutulama/dayibasi', methods=['POST'])
+def add_pmi_topping_kutulama_dayibasi():
+    data = request.get_json()
+    required = ['tarih', 'dayibasi']
+    if not all(k in data for k in required):
+        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_topping_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
+    sql_insert = "INSERT INTO pmi_topping_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        existing = cursor.fetchone()
+        if existing:
+            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
+        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        conn.commit()
+        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kutulama/kuru_kg', methods=['POST'])
+def add_pmi_topping_kutulama_kuru_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_topping_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+@app.route('/api/pmi_topping_kutulama/sera_yas_kg', methods=['POST'])
+def add_pmi_topping_kutulama_sera_yas_kg():
+    data = request.get_json()
+    dayibasi_id = data.get('dayibasi_id')
+    value = data.get('value')
+    if not dayibasi_id or value is None:
+        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_topping_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        conn.commit()
+        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+#-----------------------------------------------------------------------------------------------------------
+# Test endpoint'i
+@app.route('/api/test-connection', methods=['GET'])
+def test_db_connection():
+    """Veritabanı bağlantısını test etmek için endpoint"""
+    if test_connection():
+        return jsonify({'message': 'Veritabanı bağlantısı başarılı!'}), 200
+    else:
+        return jsonify({'message': 'Veritabanı bağlantısı başarısız!'}), 500
+
+@app.route('/api/jti_scv_kirim/test', methods=['GET'])
+def test_jti_scv_kirim_tables():
+    """JTI SCV KIRIM tablolarını test etmek için endpoint"""
+    conn = get_db_connection()
+    if not conn: 
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Dayıbaşı tablosundaki kayıtları kontrol et
+        cursor.execute("SELECT id, tarih, dayibasi FROM jti_scv_kirim_dayibasi_table ORDER BY id")
+        dayibasi_records = []
+        for row in cursor.fetchall():
+            dayibasi_records.append({
+                'id': row.id,
+                'tarih': str(row.tarih),
+                'dayibasi': row.dayibasi
+            })
+        
+        # Günlük tablosundaki kayıtları kontrol et
+        cursor.execute("SELECT id, dayibasi_id, bohcaSayisi FROM jti_scv_kirim_gunluk ORDER BY id")
+        gunluk_records = []
+        for row in cursor.fetchall():
+            gunluk_records.append({
+                'id': row.id,
+                'dayibasi_id': row.dayibasi_id,
+                'bohcaSayisi': row.bohcaSayisi
+            })
+        
+        # Ağırlık tablosundaki kayıtları kontrol et
+        cursor.execute("SELECT id, dayibasi_id, agirlik FROM jti_scv_kirim_agirlik ORDER BY id")
+        agirlik_records = []
+        for row in cursor.fetchall():
+            agirlik_records.append({
+                'id': row.id,
+                'dayibasi_id': row.dayibasi_id,
+                'agirlik': row.agirlik
+            })
+        
+        return jsonify({
+            'dayibasi_records': dayibasi_records,
+            'gunluk_records': gunluk_records,
+            'agirlik_records': agirlik_records,
+            'message': 'Test başarılı'
+        })
+        
+    except Exception as e:
+        print(f"Test hatası: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+# --- SCV Sera API Endpointleri ---
+#-----------------------------------------------------------------------------------------------------
+@app.route('/api/scv_sera', methods=['POST'])
+def add_scv_sera():
+    data = request.get_json()
+    required_fields = ['sera_yeri', 'alan', 'sera_no', 'dizi_sayisi', 'dizi_kg1', 'dizi_kg2', 'dizi_kg3', 'dizi_kg4', 'dizi_kg5', 'dizi_kg6']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        sql = """
+        INSERT INTO scv_sera (sera_yeri, alan, sera_no, dizi_sayisi, dizi_kg1, dizi_kg2, dizi_kg3, dizi_kg4, dizi_kg5, dizi_kg6)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            data['sera_yeri'], data['alan'], data['sera_no'], data['dizi_sayisi'],
+            data['dizi_kg1'], data['dizi_kg2'], data['dizi_kg3'], data['dizi_kg4'], data['dizi_kg5'], data['dizi_kg6']
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Sera başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_sera', methods=['GET'])
+def get_scv_seralar():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_sera/yerler', methods=['GET'])
+def get_scv_sera_yerleri():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Hem scv_sera tablosundan hem de scv_sera_yerleri tablosundan sera yerlerini al
+        cursor.execute("""
+            SELECT DISTINCT sera_yeri 
+            FROM (
+                SELECT sera_yeri FROM scv_sera
+                UNION
+                SELECT sera_yeri FROM scv_sera_yerleri
+            ) combined_yerler
+            ORDER BY sera_yeri
+        """)
+        yerler = [row[0] for row in cursor.fetchall()]
+        return jsonify(yerler)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_sera/nolar', methods=['GET'])
+def get_scv_sera_nolar():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT sera_no FROM scv_sera ORDER BY sera_no")
+        nolar = [row[0] for row in cursor.fetchall()]
+        return jsonify(nolar)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- SCV Sera Yerleri Yönetimi ---
+@app.route('/api/scv_sera_yerleri', methods=['POST'])
+def add_scv_sera_yeri():
+    data = request.get_json()
+    sera_yeri = data.get('sera_yeri')
+    toplam_sera_sayisi = data.get('toplam_sera_sayisi')
+    
+    if not sera_yeri or not toplam_sera_sayisi:
+        return jsonify({'message': 'Sera yeri ve toplam sera sayısı gerekli.'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", 
+                      sera_yeri, toplam_sera_sayisi)
+        conn.commit()
+        return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
+    except pyodbc.IntegrityError:
+        return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_sera_yerleri', methods=['GET'])
+def get_scv_sera_yerleri_detay():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
+                   COUNT(s.id) as mevcut_sera_sayisi
+            FROM scv_sera_yerleri sy
+            LEFT JOIN scv_sera s ON sy.sera_yeri = s.sera_yeri
+            GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
+            ORDER BY sy.sera_yeri
+        """)
+        
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- SCV Kutulama API Endpointleri ---
+#-----------------------------------------------------------------------------------------------------
+@app.route('/api/scv_kutulama', methods=['POST'])
+def add_scv_kutulama():
+    data = request.get_json()
+    required_fields = ['tarih', 'dayibasi', 'sera_yeri', 'sera_no', 'sera_yas_kg', 'kutular', 'toplam_kuru_kg', 'yas_kuru_orani']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        sql = """
+        INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            data['tarih'], data['dayibasi'], data['sera_yeri'], data['sera_no'], 
+            data['sera_yas_kg'], data['kutular'], data['toplam_kuru_kg'], data['yas_kuru_orani'],
+            data.get('alan')
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Kutulama kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_kutulama', methods=['GET'])
+def get_scv_kutulama():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM scv_kutulama ORDER BY tarih DESC, id DESC")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/scv_kutulama/tarih/<tarih>', methods=['GET'])
+def get_scv_kutulama_by_date(tarih):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = ? ORDER BY id DESC", tarih)
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- Sera Boşaltma Endpoint ---
+@app.route('/api/scv_sera/bosalt', methods=['POST'])
+def bosalt_scv_sera():
+    data = request.json
+    sera_id = data.get('id')
+    tarih = data.get('tarih') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if not sera_id:
+        return jsonify({'error': 'Sera id gerekli'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE scv_sera
+            SET dizi_sayisi=0, bosaltma_tarihi=?
+            WHERE id=?
+        """, (tarih, sera_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'id': sera_id, 'bosaltma_tarihi': tarih})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# --- İzmir Sera CRUD ---
+@app.route('/api/izmir_sera', methods=['POST'])
+def add_izmir_sera():
+    data = request.json
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO izmir_sera (sera_yeri, sera_no, dizi_sayisi, dizi_kg1, dizi_kg2, dizi_kg3, dizi_kg4, dizi_kg5, dizi_kg6)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('sera_yeri'),
+            data.get('sera_no'),
+            data.get('dizi_sayisi'),
+            data.get('dizi_kg1'),
+            data.get('dizi_kg2'),
+            data.get('dizi_kg3'),
+            data.get('dizi_kg4'),
+            data.get('dizi_kg5'),
+            data.get('dizi_kg6')
+        ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/izmir_sera', methods=['GET'])
+def get_izmir_seralar():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify([])
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM izmir_sera')
+    columns = [column[0] for column in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return jsonify(results)
+
+@app.route('/api/izmir_sera/yerler', methods=['GET'])
+def get_izmir_sera_yerleri():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify([])
+    try:
+        cursor = conn.cursor()
+        # Hem izmir_sera tablosundan hem de izmir_sera_yerleri tablosundan sera yerlerini al
+        cursor.execute("""
+            SELECT DISTINCT sera_yeri 
+            FROM (
+                SELECT sera_yeri FROM izmir_sera
+                UNION
+                SELECT sera_yeri FROM izmir_sera_yerleri
+            ) combined_yerler
+            ORDER BY sera_yeri
+        """)
+        yerler = [row[0] for row in cursor.fetchall()]
+        return jsonify(yerler)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/izmir_sera/nolar', methods=['GET'])
+def get_izmir_sera_nolar():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify([])
+    cursor = conn.cursor()
+    cursor.execute('SELECT DISTINCT sera_no FROM izmir_sera')
+    nolar = [row[0] for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return jsonify(nolar)
+
+# --- İzmir Sera Yerleri Yönetimi ---
+@app.route('/api/izmir_sera_yerleri', methods=['POST'])
+def add_izmir_sera_yeri():
+    data = request.get_json()
+    sera_yeri = data.get('sera_yeri')
+    toplam_sera_sayisi = data.get('toplam_sera_sayisi')
+    
+    if not sera_yeri or not toplam_sera_sayisi:
+        return jsonify({'message': 'Sera yeri ve toplam sera sayısı gerekli.'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO izmir_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", 
+                      sera_yeri, toplam_sera_sayisi)
+        conn.commit()
+        return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
+    except pyodbc.IntegrityError:
+        return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/izmir_sera_yerleri', methods=['GET'])
+def get_izmir_sera_yerleri_detay():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
+                   COUNT(s.id) as mevcut_sera_sayisi
+            FROM izmir_sera_yerleri sy
+            LEFT JOIN izmir_sera s ON sy.sera_yeri = s.sera_yeri
+            GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
+            ORDER BY sy.sera_yeri
+        """)
+        
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- İzmir Sera Boşaltma ---
+@app.route('/api/izmir_sera/bosalt', methods=['POST'])
+def bosalt_izmir_sera():
+    data = request.json
+    sera_id = data.get('id')
+    tarih = data.get('tarih') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if not sera_id:
+        return jsonify({'error': 'Sera id gerekli'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE izmir_sera
+            SET dizi_sayisi=0, bosaltma_tarihi=?
+            WHERE id=?
+        """, (tarih, sera_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True, 'id': sera_id, 'bosaltma_tarihi': tarih})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# --- İzmir Kutulama CRUD ---
+@app.route('/api/izmir_kutulama', methods=['POST'])
+def add_izmir_kutulama():
+    data = request.json
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO izmir_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('tarih'),
+            data.get('dayibasi'),
+            data.get('sera_yeri'),
+            data.get('sera_no'),
+            data.get('sera_yas_kg'),
+            data.get('kutular'),
+            data.get('toplam_kuru_kg'),
+            data.get('yas_kuru_orani')
+        ))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/izmir_kutulama', methods=['GET'])
+def get_izmir_kutulama():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify([])
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM izmir_kutulama')
+    columns = [column[0] for column in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return jsonify(results)
+
+# Filtre ve form değişkenleri birbirinden bağımsız olmalı
+filterSeraYeri: str = ''
+selectedSeraYeri: str = ''
+
+# --- SCV Kutulama Summary API Endpoint ---
+@app.route('/api/scv_kutulama/summary', methods=['GET'])
+def get_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        kutulama_kayitlari = cursor.fetchall()
+        
+        alan_istatistik = {}
+        genel_kayit = 0
+        genel_kutu_sayisi = 0
+        genel_toplam_kg = 0
+        
+        for row in kutulama_kayitlari:
+            alan = (row.alan or '').strip().upper()
+            kutular_json = row.kutular
+            toplam_kg = row.toplam_kuru_kg or 0
+            try:
+                kutular_array = json.loads(kutular_json)
+                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
+            except:
+                kutu_sayisi = 0
+            if alan not in alan_istatistik:
+                alan_istatistik[alan] = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+            alan_istatistik[alan]['toplam_kayit'] += 1
+            alan_istatistik[alan]['toplam_kutu_kg'] += toplam_kg
+            alan_istatistik[alan]['toplam_kutu_sayisi'] += kutu_sayisi
+            genel_kayit += 1
+            genel_kutu_sayisi += kutu_sayisi
+            genel_toplam_kg += toplam_kg
+        
+        # Debug için alan istatistiklerini yazdır
+        print(f"Alan istatistikleri: {alan_istatistik}")
+        
+        # Standart başlıklar
+        def get_alan(anahtar):
+            for k in alan_istatistik:
+                # Hem tire hem de boşluk ile arama yap
+                if anahtar in k or anahtar.replace(' ', '-') in k or anahtar.replace('-', ' ') in k:
+                    return alan_istatistik[k]
+            return {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+        
+        return jsonify({
+            'pmi_scv': get_alan('PMI SCV'),
+            'jti_scv': get_alan('JTI SCV'),
+            'pmi_topping': get_alan('PMI TOPPING'),
+            'genel': {
+                'toplam_kayit': genel_kayit,
+                'toplam_kutu_kg': genel_toplam_kg,
+                'toplam_kutu_sayisi': genel_kutu_sayisi
+            }
+        })
+    except Exception as e:
+        print(f"Kutulama özeti hatası: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+if __name__ == '__main__':
+    print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
+    if initialize_db():
+        ensure_kutulama_alan_column()
+        print("🚀 Flask uygulaması başlatılıyor...")
+        #app.run(debug=True, port=5000)
+        app.run(debug=True, host="0.0.0.0", port=5000)
+
+    else:
+        print("❌ Veritabanı bağlantısı kurulamadı. Uygulama başlatılamıyor.")
+        print("\n🔧 Sorun giderme adımları:")
+        print("1. SQL Server Management Studio'dan veritabanına bağlanabildiğinizi kontrol edin")
+        print("2. Windows Authentication'ın etkin olduğundan emin olun")
+        print("3. SQL Server Browser servisinin çalıştığını kontrol edin")
+        print("4. Firewall ayarlarını kontrol edin")
+        print("5. 'pip install pyodbc' ile pyodbc'nin güncel olduğundan emin olun")
+        print("5. 'pip install pyodbc' ile pyodbc'nin güncel olduğundan emin olun")
