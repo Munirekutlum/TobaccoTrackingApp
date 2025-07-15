@@ -2983,6 +2983,10 @@ def get_scv_kutulama_summary():
     finally:
         if conn: conn.close()
 
+@app.route("/")
+def home():
+    return "API çalışıyor!"
+
 if __name__ == '__main__':
     print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
