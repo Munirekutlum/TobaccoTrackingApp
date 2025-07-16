@@ -11,7 +11,7 @@ CORS(app)
 # --- MSSQL Bağlantı Ayarları ---
 SERVER_NAME = r'DESKTOP-GVRQ3CP'
 DATABASE_NAME = r'mobil_takip_db'
-DRIVER_NAME = r'ODBC Driver 11 for SQL Server'
+DRIVER_NAME = r'ODBC Driver 17 for SQL Server'
 
 # Ana sunucuya bağlanmak için (veritabanı oluşturma işlemleri için)
 master_connection_string = (

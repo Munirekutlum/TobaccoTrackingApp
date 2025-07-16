@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg \
     && echo "deb [arch=amd64] https://packages.microsoft.com/debian/11/prod bullseye main" > /etc/apt/sources.list.d/mssql-release.list
 
-RUN apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql18
+RUN apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql17
 
 # 4. Çalışma dizinini ayarla
 WORKDIR /app
