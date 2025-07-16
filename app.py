@@ -443,7 +443,7 @@ def login():
     conn.close()
 
     if user:
-        user_data = {'id': user.id, 'email': user.email, 'name': user.name, 'surname': user.surname}
+        user_data = {'id': user['id'], 'email': user['email'], 'name': user['name'], 'surname': user['surname']}
         return jsonify({'message': 'Giriş başarılı.', 'user': user_data})
     else:
         return jsonify({'message': 'Email veya şifre hatalı.'}), 401
