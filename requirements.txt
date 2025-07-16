@@ -1,5 +1,4 @@
-Flask==2.2.2
-Flask-Cors==3.0.10
+Flask==2.3.3
+Flask-CORS==4.0.0
+pandas==2.1.1
 gunicorn==21.2.0
-werkzeug==2.2.3
-pandas==1.5.2

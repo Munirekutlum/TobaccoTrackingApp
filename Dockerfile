@@ -1,28 +1,26 @@
-# 1. Python 3.10 slim imajı baz alınıyor
-FROM python:3.10-slim
+# Python 3.11 slim imajını kullan
+FROM python:3.11-slim
 
-# 2. Sistem bağımlılıklarını kur
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg2 \
-    apt-transport-https \
-    unixodbc-dev
-
-# 3. Microsoft ODBC Driver deposunu ekle ve sürücüyü kur
-RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg \
-    && echo "deb [arch=amd64] https://packages.microsoft.com/debian/11/prod bullseye main" > /etc/apt/sources.list.d/mssql-release.list
-
-RUN apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql17
-
-# 4. Çalışma dizinini ayarla
+# Çalışma dizinini ayarla
 WORKDIR /app
 
-# 5. Python bağımlılıklarını yükle
+# Sistem paketlerini güncelle ve gerekli paketleri yükle
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python gereksinimlerini kopyala ve yükle
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 6. Proje dosyalarını kopyala
+# Uygulama dosyalarını kopyala
 COPY . .
 
-# 7. Uygulamayı gunicorn ile başlat, port ortam değişkeninden alınacak
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+# Veritabanı dizinini oluştur
+RUN mkdir -p /app/database
+
+# Port 5000'i aç
+EXPOSE 5000
+
+# Uygulama çalıştır
+CMD ["python", "app.py"]
