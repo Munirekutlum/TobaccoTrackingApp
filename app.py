@@ -406,7 +406,7 @@ def register():
 
     cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", email, password, name, surname)
+        cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", (email, password, name, surname))
         conn.commit()
         return jsonify({'message': 'Kayıt başarılı.'}), 201
     except sqlite3.IntegrityError:
@@ -431,7 +431,7 @@ def login():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
 
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, name, surname FROM users WHERE email = ? AND password = ?", email, password)
+    cursor.execute("SELECT id, email, name, surname FROM users WHERE email = ? AND password = ?", (email, password))
     user = cursor.fetchone()
 
     cursor.close()
@@ -561,12 +561,12 @@ def add_or_update_gunluk_entry():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['userId'], data['tarih'])
+        cursor.execute(sql_check, (data['userId'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute(sql_update, data['bocaSayisi'], existing.id)
+            cursor.execute(sql_update, (data['bocaSayisi'], existing.id))
         else:
-            cursor.execute(sql_insert, data['userId'], data['tarih'], data['bocaSayisi'])
+            cursor.execute(sql_insert, (data['userId'], data['tarih'], data['bocaSayisi']))
         conn.commit()
         return jsonify({'message': 'Günlük giriş başarıyla kaydedildi.'}), 200
     except Exception as e:
@@ -586,7 +586,7 @@ def add_agirlik_entry():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, data['gunlukId'], data['agirlik'])
+        cursor.execute(sql, (data['gunlukId'], data['agirlik']))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -606,7 +606,7 @@ def get_agirlik_details_by_gunlukId():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, gunluk_id)
+        cursor.execute(sql, (gunluk_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -623,7 +623,7 @@ def delete_agirlik_entry(agirlik_id):
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, agirlik_id)
+        cursor.execute(sql, (agirlik_id,))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -705,16 +705,16 @@ def add_or_update_izmir_kirim_gunluk():
         existing = cursor.fetchone()
         if existing:
             if agirlik_id:
-                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
             else:
-                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
             conn.commit()
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
             if agirlik_id:
-                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
-                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi) VALUES (?, ?)", dayibasi_id, bohcaSayisi)
+                cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi) VALUES (?, ?)", (dayibasi_id, bohcaSayisi))
             conn.commit()
             return jsonify({'message': 'Günlük eklendi.'}), 201
     except Exception as e:
@@ -734,7 +734,7 @@ def add_izmir_kirim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        cursor.execute("INSERT INTO izmir_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", (dayibasi_id, agirlik))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -752,7 +752,7 @@ def get_izmir_kirim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -774,11 +774,11 @@ def add_izmir_kirim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -831,11 +831,11 @@ def add_izmir_dizim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -855,7 +855,7 @@ def add_izmir_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -873,7 +873,7 @@ def get_izmir_dizim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -896,11 +896,11 @@ def add_or_update_izmir_dizim_gunluk():
         cursor.execute("SELECT id FROM izmir_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -955,11 +955,11 @@ def add_izmir_kutulama_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -978,7 +978,7 @@ def add_izmir_kutulama_kuru_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO izmir_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -997,7 +997,7 @@ def add_izmir_kutulama_sera_yas_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO izmir_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1078,17 +1078,17 @@ def add_or_update_jti_scv_kirim_gunluk():
         
         if existing:
             if agirlik_id:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
             else:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
             conn.commit()
             print("Günlük güncellendi")
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
             if agirlik_id:
-                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
-                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, None))
             conn.commit()
             print("Günlük eklendi")
             return jsonify({'message': 'Günlük eklendi.'}), 201
@@ -1127,7 +1127,7 @@ def add_jti_scv_kirim_agirlik():
             print(f"Dayıbaşı ID {dayibasi_id} bulunamadı")
             return jsonify({'message': f'Dayıbaşı ID {dayibasi_id} bulunamadı. Önce dayıbaşı kaydı oluşturun.'}), 400
         
-        cursor.execute("INSERT INTO jti_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        cursor.execute("INSERT INTO jti_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", (dayibasi_id, agirlik))
         conn.commit()
         print("Ağırlık başarıyla eklendi")
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
@@ -1147,7 +1147,7 @@ def get_jti_scv_kirim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1174,14 +1174,14 @@ def add_jti_scv_kirim_dayibasi():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         print(f"Mevcut dayıbaşı kaydı: {existing}")
         
         if existing:
             print("Bu dayıbaşı ve tarihe ait kayıt zaten var")
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         print("Dayıbaşı kaydı başarıyla eklendi")
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
@@ -1238,11 +1238,11 @@ def add_jti_scv_dizim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1262,7 +1262,7 @@ def add_jti_scv_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1280,7 +1280,7 @@ def get_jti_scv_dizim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1303,11 +1303,11 @@ def add_or_update_jti_scv_dizim_gunluk():
         cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -1361,11 +1361,11 @@ def add_jti_scv_kutulama_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1384,7 +1384,7 @@ def add_jti_scv_kutulama_kuru_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO jti_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1403,7 +1403,7 @@ def add_jti_scv_kutulama_sera_yas_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO jti_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1465,16 +1465,16 @@ def add_or_update_pmi_scv_kirim_gunluk():
         existing = cursor.fetchone()
         if existing:
             if agirlik_id:
-                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
             else:
-                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
             conn.commit()
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
             if agirlik_id:
-                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
-                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+                cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, None))
             conn.commit()
             return jsonify({'message': 'Günlük eklendi.'}), 201
     except Exception as e:
@@ -1494,7 +1494,7 @@ def add_pmi_scv_kirim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        cursor.execute("INSERT INTO pmi_scv_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", (dayibasi_id, agirlik))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1512,7 +1512,7 @@ def get_pmi_scv_kirim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1534,11 +1534,11 @@ def add_pmi_scv_kirim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1593,11 +1593,11 @@ def add_pmi_scv_dizim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1617,7 +1617,7 @@ def add_pmi_scv_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1635,7 +1635,7 @@ def get_pmi_scv_dizim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1658,11 +1658,11 @@ def add_or_update_pmi_scv_dizim_gunluk():
         cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -1715,11 +1715,11 @@ def add_pmi_scv_kutulama_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1738,7 +1738,7 @@ def add_pmi_scv_kutulama_kuru_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO pmi_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1757,7 +1757,7 @@ def add_pmi_scv_kutulama_sera_yas_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO pmi_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1819,16 +1819,16 @@ def add_or_update_pmi_topping_kirim_gunluk():
         existing = cursor.fetchone()
         if existing:
             if agirlik_id:
-                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", bohcaSayisi, agirlik_id, existing.id)
+                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
             else:
-                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", bohcaSayisi, existing.id)
+                cursor.execute("UPDATE pmi_topping_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
             conn.commit()
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
             if agirlik_id:
-                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, agirlik_id)
+                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
-                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", dayibasi_id, bohcaSayisi, None)
+                cursor.execute("INSERT INTO pmi_topping_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, None))
             conn.commit()
             return jsonify({'message': 'Günlük eklendi.'}), 201
     except Exception as e:
@@ -1848,7 +1848,7 @@ def add_pmi_topping_kirim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", dayibasi_id, agirlik)
+        cursor.execute("INSERT INTO pmi_topping_kirim_agirlik (dayibasi_id, agirlik) VALUES (?, ?)", (dayibasi_id, agirlik))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1866,7 +1866,7 @@ def get_pmi_topping_kirim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1888,11 +1888,11 @@ def add_pmi_topping_kirim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1946,11 +1946,11 @@ def add_pmi_topping_dizim_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1970,7 +1970,7 @@ def add_pmi_topping_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", dayibasi_id, agirlik, yaprakSayisi)
+        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1988,7 +1988,7 @@ def get_pmi_topping_dizim_agirlik_details():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, dayibasi_id)
+        cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -2011,11 +2011,11 @@ def add_or_update_pmi_topping_dizim_gunluk():
         cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ? WHERE id = ?", diziAdedi, existing.id)
+            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", dayibasi_id, diziAdedi)
+            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -2067,11 +2067,11 @@ def add_pmi_topping_kutulama_dayibasi():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, data['dayibasi'], data['tarih'])
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, data['tarih'], data['dayibasi'])
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2090,7 +2090,7 @@ def add_pmi_topping_kutulama_kuru_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO pmi_topping_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2109,7 +2109,7 @@ def add_pmi_topping_kutulama_sera_yas_kg():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", dayibasi_id, value)
+        cursor.execute("INSERT INTO pmi_topping_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
         conn.commit()
         return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
