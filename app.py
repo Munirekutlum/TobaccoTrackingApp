@@ -392,27 +392,32 @@ def ensure_kutulama_alan_column():
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.get_json()
-    email = data.get('email')
+    email = (data.get('email') or '').strip()
     password = data.get('password')
-    name = data.get('name')
-    surname = data.get('surname')
+    name = (data.get('name') or '').strip()
+    surname = (data.get('surname') or '').strip()
 
     if not email or not password or not name or not surname:
-        return jsonify({'message': 'Tüm alanlar zorunludur: email, şifre, ad ve soyad.'}), 400
+        return jsonify({'message': 'Tüm alanlar zorunlu.'}), 400
 
     conn = get_db_connection()
     if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+        return jsonify({'message': 'Veritabanı hatası.'}), 500
 
     cursor = conn.cursor()
     try:
         cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", (email, password, name, surname))
+        user_id = cursor.lastrowid
         conn.commit()
-        return jsonify({'message': 'Kayıt başarılı.'}), 201
+        # Yeni kullanıcıyı çek
+        cursor.execute("SELECT id, email, name, surname FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        user_data = {'id': user['id'], 'email': user['email'], 'name': user['name'], 'surname': user['surname']}
+        return jsonify({'message': 'Kayıt başarılı.', 'user': user_data}), 201
     except sqlite3.IntegrityError:
         return jsonify({'message': 'Bu email zaten kayıtlı.'}), 409
     except Exception as e:
-        return jsonify({'message': f'Sunucu hatası: {e}'}), 500
+        return jsonify({'message': f'Hata: {e}'}), 500
     finally:
         cursor.close()
         conn.close()
