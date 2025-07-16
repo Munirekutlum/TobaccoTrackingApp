@@ -397,6 +397,8 @@ def register():
     name = (data.get('name') or '').strip()
     surname = (data.get('surname') or '').strip()
 
+    print(f"[REGISTER] email: {email}, password: {password}")
+
     if not email or not password or not name or not surname:
         return jsonify({'message': 'Tüm alanlar zorunlu.'}), 400
 
@@ -427,6 +429,8 @@ def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
+
+    print(f"[LOGIN] email: {email}, password: {password}")
 
     if not email or not password:
         return jsonify({'message': 'Email ve şifre gerekli.'}), 400
