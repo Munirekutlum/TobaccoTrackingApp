@@ -2,3 +2,4 @@ Flask==2.2.2
 Flask-Cors==3.0.10
 gunicorn==21.2.0
 werkzeug==2.2.3
+pandas==1.5.2
