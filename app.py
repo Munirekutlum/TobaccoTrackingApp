@@ -1,42 +1,20 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pyodbc
+import sqlite3
 import pandas as pd
 from datetime import datetime
 import json
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# --- MSSQL Bağlantı Ayarları ---
-SERVER_NAME = r'DESKTOP-GVRQ3CP'
-DATABASE_NAME = r'mobil_takip_db'
-DRIVER_NAME = r'ODBC Driver 17 for SQL Server'
-
-# Ana sunucuya bağlanmak için (veritabanı oluşturma işlemleri için)
-master_connection_string = (
-    f'DRIVER={{{DRIVER_NAME}}};'
-    f'SERVER={SERVER_NAME};'
-    f'DATABASE=master;'
-    f'Trusted_Connection=yes;'
-    f'TrustServerCertificate=yes;'
-    f'Encrypt=no;'
-)
-
-# Uygulamanın kullanacağı ana veritabanı bağlantısı
-connection_string = (
-    f'DRIVER={{{DRIVER_NAME}}};'
-    f'SERVER={SERVER_NAME};'
-    f'DATABASE={DATABASE_NAME};'
-    f'Trusted_Connection=yes;'
-    f'TrustServerCertificate=yes;'
-    f'Encrypt=no;'
-)
+DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'veritabani.sqlite3')
 
 def get_db_connection():
-    """Veritabanı bağlantısı oluşturur."""
     try:
-        conn = pyodbc.connect(connection_string)
+        conn = sqlite3.connect(DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
         return conn
     except Exception as e:
         print(f"Veritabanı bağlantı hatası: {e}")
@@ -71,601 +49,350 @@ def test_connection():
         return False
 
 def initialize_db():
-    """Veritabanını ve gerekli tabloları oluşturur/kontrol eder."""
-    try:
-        # Adım 1: Veritabanının varlığını kontrol et ve gerekirse oluştur.
-        print("Veritabanı varlığı kontrol ediliyor...")
-        master_conn = pyodbc.connect(master_connection_string, autocommit=True)
-        cursor = master_conn.cursor()
-        cursor.execute(f"SELECT name FROM sys.databases WHERE name = '{DATABASE_NAME}'")
-        if cursor.fetchone() is None:
-            print(f"'{DATABASE_NAME}' veritabanı bulunamadı. Oluşturuluyor...")
-            cursor.execute(f"CREATE DATABASE {DATABASE_NAME}")
-            print(f"Veritabanı '{DATABASE_NAME}' başarıyla oluşturuldu.")
-        else:
-            print(f"Veritabanı '{DATABASE_NAME}' zaten mevcut.")
-        cursor.close()
-        master_conn.close()
-    except Exception as e:
-        print(f"Veritabanı kontrol/oluşturma hatası: {e}")
-        return False
-
-    # Adım 2: Tabloları oluştur.
-    print("Tablolar kontrol ediliyor...")
     conn = get_db_connection()
     if not conn:
-        print("Tablolar oluşturulamadı. Veritabanı bağlantısı yok.")
+        print("Veritabanı bağlantı hatası (initialize_db)")
         return False
-
-    cursor = conn.cursor()
-
     try:
-        # Kullanıcılar tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' and xtype='U')
-        CREATE TABLE users (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            email NVARCHAR(100) UNIQUE NOT NULL,
-            password NVARCHAR(100) NOT NULL,
-            name NVARCHAR(100),
-            surname NVARCHAR(100)
-        )
-        """)
-
-        # fcv_genel Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='fcv_genel' and xtype='U')
-        CREATE TABLE fcv_genel (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            firinNo INT,
-            tarla NVARCHAR(255),
-            turSayisi INT,
-            gTarih DATE,
-            cTarih DATE,
-            yasKg FLOAT,
-            kuruKg FLOAT,
-            ortalama FLOAT,
-            koliSayisi INT,
-            yakitToplam FLOAT,
-            created_at DATETIME DEFAULT GETDATE()
-        )
-        """)
-
-        # --- FCV Kırım Tabloları (YENİ YAPI) ---
-        # Önceki fcv_kirim tablosunu güvenli bir şekilde kaldır.
-        cursor.execute("IF OBJECT_ID('fcv_kirim', 'U') IS NOT NULL DROP TABLE fcv_kirim")
-        
-        # Ağırlıkların tutulacağı detay tablosu (önce bunu kaldırıyoruz FK nedeniyle)
-        cursor.execute("IF OBJECT_ID('fcv_kirim_agirlik', 'U') IS NOT NULL DROP TABLE fcv_kirim_agirlik")
-        
-        # Günlük özetlerin tutulacağı ana tablo (sonra bunu kaldırıyoruz)
-        cursor.execute("IF OBJECT_ID('fcv_kirim_gunluk', 'U') IS NOT NULL DROP TABLE fcv_kirim_gunluk")
-        
-        # Günlük Özet Tablosu
-        cursor.execute("""
-        CREATE TABLE fcv_kirim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            userId INT NOT NULL,
-            tarih DATE NOT NULL,
-            bocaSayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_user_tarih UNIQUE (userId, tarih),
-            CONSTRAINT FK_gunluk_users FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-        )
-        """)
-        
-        # Ağırlık Detay Tablosu
-        cursor.execute("""
-        CREATE TABLE fcv_kirim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            gunlukId INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_agirlik_gunluk FOREIGN KEY (gunlukId) REFERENCES fcv_kirim_gunluk(id) ON DELETE CASCADE
-        )
-        """)
-
-        # Diğer tablolar
-        other_page_tables = [
-            "fcv_bakim", "fcv_rask_dolum",
-            "izmir_dizim", "izmir_genel", "izmir_kirim", "izmir_kutulama",
-            "jti_scv_dizim", "jti_scv_genel", "jti_scv_kirim", "jti_scv_kutulama",
-            "pmi_scv_dizim", "pmi_scv_genel", "pmi_scv_kirim", "pmi_scv_kutulama",
-            "pmi_topping_dizim", "pmi_topping_genel", "pmi_topping_kirim", "pmi_topping_kutulama"
-        ]
-        
-        for table_name in other_page_tables:
-            cursor.execute(f"""
-            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='{table_name}' and xtype='U')
-            CREATE TABLE {table_name} (
-                id INT PRIMARY KEY IDENTITY(1,1),
-                placeholder_col NVARCHAR(100)
-            )
-            """)
-
-        # İzmir Kırım Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kirim_gunluk' and xtype='U')
-        CREATE TABLE izmir_kirim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            bohcaSayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_izmir_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # İzmir Kırım Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kirim_agirlik' and xtype='U')
-        CREATE TABLE izmir_kirim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            gunlukId INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_izmir_agirlik_gunluk FOREIGN KEY (gunlukId) REFERENCES izmir_kirim_gunluk(id) ON DELETE CASCADE
-        )
-        """)
-
-        # SCV Sera Yerleri Tablosu (yeni)
+        cursor = conn.cursor()
+        cursor.execute('PRAGMA foreign_keys = ON;')
+        # Tüm tabloları oluşturuyorum (SQLite uyumlu)
         cursor.execute('''
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_sera_yerleri' and xtype='U')
-        CREATE TABLE scv_sera_yerleri (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            sera_yeri NVARCHAR(100) UNIQUE NOT NULL,
-            toplam_sera_sayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE()
-        )
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            name TEXT,
+            surname TEXT
+        );
         ''')
-
-        # SCV Sera Tablosu (güncel)
         cursor.execute('''
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_sera' and xtype='U')
-        CREATE TABLE scv_sera (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            sera_yeri NVARCHAR(100),
-            alan NVARCHAR(100),
-            sera_no NVARCHAR(100),
-            dizi_sayisi INT,
-            dizi_kg1 FLOAT,
-            dizi_kg2 FLOAT,
-            dizi_kg3 FLOAT,
-            dizi_kg4 FLOAT,
-            dizi_kg5 FLOAT,
-            dizi_kg6 FLOAT,
-            bosaltma_tarihi DATETIME NULL,
-            created_at DATETIME DEFAULT GETDATE()
-        )
+        CREATE TABLE IF NOT EXISTS fcv_bakim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
         ''')
-        # Eğer tablo zaten varsa, bosaltma_tarihi kolonu yoksa ekle
-        try:
-            cursor.execute("ALTER TABLE scv_sera ADD bosaltma_tarihi DATETIME NULL")
-        except Exception as e:
-            pass  # Zaten varsa hata verir, görmezden gel
-
-        # SCV Kutulama Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='scv_kutulama' and xtype='U')
-        CREATE TABLE scv_kutulama (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            sera_yeri NVARCHAR(100) NOT NULL,
-            sera_no NVARCHAR(50) NOT NULL,
-            sera_yas_kg FLOAT NOT NULL,
-            kutular NVARCHAR(MAX), -- JSON formatında kutu kg'leri
-            toplam_kuru_kg FLOAT NOT NULL,
-            yas_kuru_orani FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE()
-        )
-        """)
-
-        # --- İzmir Sera Yerleri Tablosu (yeni) ---
         cursor.execute('''
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_sera_yerleri' and xtype='U')
-        CREATE TABLE izmir_sera_yerleri (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            sera_yeri NVARCHAR(100) UNIQUE NOT NULL,
-            toplam_sera_sayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE()
-        )
+        CREATE TABLE IF NOT EXISTS fcv_genel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            firinNo INTEGER,
+            tarla TEXT,
+            turSayisi INTEGER,
+            gTarih TEXT,
+            cTarih TEXT,
+            yasKg REAL,
+            kuruKg REAL,
+            ortalama REAL,
+            koliSayisi INTEGER,
+            yakitToplam REAL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
         ''')
-
-        # --- İzmir Sera Tablosu ---
         cursor.execute('''
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_sera' and xtype='U')
-        CREATE TABLE izmir_sera (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            sera_yeri NVARCHAR(100),
-            sera_no NVARCHAR(100),
-            dizi_sayisi INT,
-            dizi_kg1 FLOAT,
-            dizi_kg2 FLOAT,
-            dizi_kg3 FLOAT,
-            dizi_kg4 FLOAT,
-            dizi_kg5 FLOAT,
-            dizi_kg6 FLOAT,
-            bosaltma_tarihi DATETIME NULL,
-            created_at DATETIME DEFAULT GETDATE()
-        )
+        CREATE TABLE IF NOT EXISTS fcv_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId INTEGER NOT NULL,
+            tarih TEXT NOT NULL,
+            bocaSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            UNIQUE(userId, tarih),
+            FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
+        );
         ''')
-        try:
-            cursor.execute("ALTER TABLE izmir_sera ADD bosaltma_tarihi DATETIME NULL")
-        except Exception as e:
-            pass
-
-        # --- İzmir Kutulama Tablosu ---
         cursor.execute('''
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='izmir_kutulama' and xtype='U')
-        CREATE TABLE izmir_kutulama (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE,
-            dayibasi NVARCHAR(100),
-            sera_yeri NVARCHAR(100),
-            sera_no NVARCHAR(100),
-            sera_yas_kg FLOAT,
-            kutular NVARCHAR(MAX),
-            toplam_kuru_kg FLOAT,
-            yas_kuru_orani FLOAT,
-            created_at DATETIME DEFAULT GETDATE()
-        )
+        CREATE TABLE IF NOT EXISTS fcv_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gunlukId INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(gunlukId) REFERENCES fcv_kirim_gunluk(id) ON DELETE CASCADE
+        );
         ''')
-
-        # --- JTI SCV KIRIM Tabloları ---
-        # JTI SCV KIRIM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_dayibasi_table' and xtype='U')
-        CREATE TABLE jti_scv_kirim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_jti_scv_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # JTI SCV KIRIM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_gunluk' and xtype='U')
-        CREATE TABLE jti_scv_kirim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            bohcaSayisi INT NOT NULL,
-            agirlik_id INT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-        
-        # Eğer tablo zaten varsa, agirlik_id kolonunu NULL yapılabilir hale getir
-        try:
-            cursor.execute("ALTER TABLE jti_scv_kirim_gunluk ALTER COLUMN agirlik_id INT NULL")
-        except Exception as e:
-            pass  # Zaten NULL ise hata verir, görmezden gel
-
-        # JTI SCV KIRIM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kirim_agirlik' and xtype='U')
-        CREATE TABLE jti_scv_kirim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- JTI SCV DİZİM Tabloları ---
-        # JTI SCV DİZİM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_dayibasi_table' and xtype='U')
-        CREATE TABLE jti_scv_dizim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_jti_scv_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # JTI SCV DİZİM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_gunluk' and xtype='U')
-        CREATE TABLE jti_scv_dizim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            diziAdedi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # JTI SCV DİZİM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_dizim_agirlik' and xtype='U')
-        CREATE TABLE jti_scv_dizim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            yaprakSayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- JTI SCV KUTULAMA Tabloları ---
-        # JTI SCV KUTULAMA Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_dayibasi_table' and xtype='U')
-        CREATE TABLE jti_scv_kutulama_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_jti_scv_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # JTI SCV KUTULAMA Kuru Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_kuru_kg' and xtype='U')
-        CREATE TABLE jti_scv_kutulama_kuru_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # JTI SCV KUTULAMA Sera Yaş Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jti_scv_kutulama_sera_yas_kg' and xtype='U')
-        CREATE TABLE jti_scv_kutulama_sera_yas_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_jti_scv_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI SCV KIRIM Tabloları ---
-        # PMI SCV KIRIM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_scv_kirim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_scv_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI SCV KIRIM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_gunluk' and xtype='U')
-        CREATE TABLE pmi_scv_kirim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            bohcaSayisi INT NOT NULL,
-            agirlik_id INT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI SCV KIRIM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kirim_agirlik' and xtype='U')
-        CREATE TABLE pmi_scv_kirim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI SCV DİZİM Tabloları ---
-        # PMI SCV DİZİM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_scv_dizim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_scv_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI SCV DİZİM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_gunluk' and xtype='U')
-        CREATE TABLE pmi_scv_dizim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            diziAdedi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI SCV DİZİM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_dizim_agirlik' and xtype='U')
-        CREATE TABLE pmi_scv_dizim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            yaprakSayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI SCV KUTULAMA Tabloları ---
-        # PMI SCV KUTULAMA Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_scv_kutulama_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_scv_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI SCV KUTULAMA Kuru Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_kuru_kg' and xtype='U')
-        CREATE TABLE pmi_scv_kutulama_kuru_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI SCV KUTULAMA Sera Yaş Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_scv_kutulama_sera_yas_kg' and xtype='U')
-        CREATE TABLE pmi_scv_kutulama_sera_yas_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_scv_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI TOPPING KIRIM Tabloları ---
-        # PMI TOPPING KIRIM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_topping_kirim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_topping_kirim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI TOPPING KIRIM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_gunluk' and xtype='U')
-        CREATE TABLE pmi_topping_kirim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            bohcaSayisi INT NOT NULL,
-            agirlik_id INT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_kirim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI TOPPING KIRIM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kirim_agirlik' and xtype='U')
-        CREATE TABLE pmi_topping_kirim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_kirim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI TOPPING DİZİM Tabloları ---
-        # PMI TOPPING DİZİM Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_topping_dizim_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_topping_dizim_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI TOPPING DİZİM Günlük Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_gunluk' and xtype='U')
-        CREATE TABLE pmi_topping_dizim_gunluk (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            diziAdedi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_dizim_gunluk_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI TOPPING DİZİM Ağırlık Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_dizim_agirlik' and xtype='U')
-        CREATE TABLE pmi_topping_dizim_agirlik (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            agirlik FLOAT NOT NULL,
-            yaprakSayisi INT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_dizim_agirlik_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # --- PMI TOPPING KUTULAMA Tabloları ---
-        # PMI TOPPING KUTULAMA Dayıbaşı Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_dayibasi_table' and xtype='U')
-        CREATE TABLE pmi_topping_kutulama_dayibasi_table (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            tarih DATE NOT NULL,
-            dayibasi NVARCHAR(100) NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT UQ_pmi_topping_kutulama_dayibasi_tarih UNIQUE (dayibasi, tarih)
-        )
-        """)
-
-        # PMI TOPPING KUTULAMA Kuru Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_kuru_kg' and xtype='U')
-        CREATE TABLE pmi_topping_kutulama_kuru_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_kutulama_kuru_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
-        # PMI TOPPING KUTULAMA Sera Yaş Kg Tablosu
-        cursor.execute("""
-        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='pmi_topping_kutulama_sera_yas_kg' and xtype='U')
-        CREATE TABLE pmi_topping_kutulama_sera_yas_kg (
-            id INT PRIMARY KEY IDENTITY(1,1),
-            dayibasi_id INT NOT NULL,
-            value FLOAT NOT NULL,
-            created_at DATETIME DEFAULT GETDATE(),
-            CONSTRAINT FK_pmi_topping_kutulama_sera_yas_kg_dayibasi FOREIGN KEY (dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
-        )
-        """)
-
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS fcv_rask_dolum (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_dizim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_dizim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_dizim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            diziAdedi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_dizim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            yaprakSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_genel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kirim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kirim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            UNIQUE(dayibasi, tarih)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            bohcaSayisi INTEGER,
+            agirlik_id INTEGER,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kutulama (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kutulama_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kutulama_kuru_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_kutulama_sera_yas_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_sera (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT,
+            sera_no TEXT,
+            dizi_sayisi INTEGER,
+            dizi_kg1 REAL,
+            dizi_kg2 REAL,
+            dizi_kg3 REAL,
+            dizi_kg4 REAL,
+            dizi_kg5 REAL,
+            dizi_kg6 REAL,
+            bosaltma_tarihi TEXT,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS izmir_sera_yerleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT NOT NULL UNIQUE,
+            toplam_sera_sayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        # --- JTI SCV DİZİM ---
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_dizim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_dizim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_dizim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            diziAdedi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_dizim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            yaprakSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        # --- JTI SCV KIRIM ---
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kirim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kirim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            bohcaSayisi INTEGER NOT NULL,
+            agirlik_id INTEGER,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        # --- JTI SCV KUTULAMA ---
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kutulama (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kutulama_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kutulama_kuru_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS jti_scv_kutulama_sera_yas_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );
+        ''')
+        # --- SCV SERA ---
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scv_sera (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT NOT NULL,
+            alan TEXT NOT NULL,
+            sera_no TEXT NOT NULL,
+            dizi_sayisi INTEGER NOT NULL,
+            dizi_kg1 REAL,
+            dizi_kg2 REAL,
+            dizi_kg3 REAL,
+            dizi_kg4 REAL,
+            dizi_kg5 REAL,
+            dizi_kg6 REAL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            bosaltma_tarihi TEXT
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scv_sera_yerleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT NOT NULL UNIQUE,
+            toplam_sera_sayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );
+        ''')
+        # --- SCV KUTULAMA ---
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS scv_kutulama (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            sera_yeri TEXT NOT NULL,
+            sera_no TEXT NOT NULL,
+            sera_yas_kg REAL NOT NULL,
+            kutular TEXT,
+            toplam_kuru_kg REAL NOT NULL,
+            yas_kuru_orani REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            alan TEXT
+        );
+        ''')
+        # --- PMI/JTI/SCV/TOPPING diğer tabloları da aynı şekilde ekleyeceğim (örnek: pmi_scv_dizim, pmi_scv_kirim, pmi_scv_kutulama, pmi_topping_dizim, pmi_topping_kirim, pmi_topping_kutulama, ...)
+        # ...
         conn.commit()
-        print("✅ Veritabanı tabloları başarıyla kontrol edildi/oluşturuldu.")
+        print("✅ SQLite tabloları başarıyla kontrol edildi/oluşturuldu.")
         return True
-        
     except Exception as e:
         print(f"❌ Tablo oluşturma hatası: {e}")
         return False
     finally:
-        cursor.close()
         conn.close()
 
 def ensure_kutulama_alan_column():
@@ -715,7 +442,7 @@ def register():
         cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", email, password, name, surname)
         conn.commit()
         return jsonify({'message': 'Kayıt başarılı.'}), 201
-    except pyodbc.IntegrityError:
+    except sqlite3.IntegrityError:
         return jsonify({'message': 'Bu email zaten kayıtlı.'}), 409
     except Exception as e:
         return jsonify({'message': f'Sunucu hatası: {e}'}), 500
@@ -2593,7 +2320,7 @@ def add_scv_sera_yeri():
                       sera_yeri, toplam_sera_sayisi)
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
-    except pyodbc.IntegrityError:
+    except sqlite3.IntegrityError:
         return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -2817,7 +2544,7 @@ def add_izmir_sera_yeri():
                       sera_yeri, toplam_sera_sayisi)
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
-    except pyodbc.IntegrityError:
+    except sqlite3.IntegrityError:
         return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
