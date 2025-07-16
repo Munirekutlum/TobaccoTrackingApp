@@ -1,4 +1,7 @@
 Flask==2.3.3
 Flask-CORS==4.0.0
-pandas==2.1.1
 gunicorn==21.2.0
+numpy==1.24.3
+pandas==2.1.1
+python-dateutil==2.9.0
+pytz==2025.2
