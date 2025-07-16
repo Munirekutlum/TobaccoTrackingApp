@@ -1,4 +1,3 @@
 Flask==2.2.2
-pyodbc==4.0.35
 Flask-Cors==3.0.10
-pandas==1.5.2 
+gunicorn==21.2.0
