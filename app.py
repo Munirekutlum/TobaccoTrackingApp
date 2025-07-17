@@ -11,8 +11,6 @@ CORS(app)
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'veritabani.sqlite3')
 
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'veritabani.sqlite3')
-
 def get_db_connection():
     try:
         conn = sqlite3.connect(DATABASE_PATH)
@@ -21,6 +19,295 @@ def get_db_connection():
     except Exception as e:
         print(f"Veritabanı bağlantı hatası: {e}")
         return None
+
+def test_connection():
+    """Bağlantıyı test eder ve sunucu bilgilerini gösterir"""
+    conn = get_db_connection()
+    if not conn:
+        print("Bağlantı test edilemedi.")
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT @@VERSION")
+        version = cursor.fetchone()[0]
+        print(f"SQL Server Version: {version}")
+        
+        cursor.execute("SELECT DB_NAME()")
+        db_name = cursor.fetchone()[0]
+        print(f"Current Database: {db_name}")
+        
+        cursor.execute("SELECT SYSTEM_USER")
+        user = cursor.fetchone()[0]
+        print(f"Connected as: {user}")
+        
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Bağlantı testi hatası: {e}")
+        return False
+
+def initialize_db():
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (initialize_db)")
+        return False
+    try:
+        cursor = conn.cursor()
+        cursor.execute('PRAGMA foreign_keys = ON;')
+        # --- Tüm tabloları oluştur ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            name TEXT,
+            surname TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fcv_bakim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fcv_genel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            firinNo INTEGER,
+            tarla TEXT,
+            turSayisi INTEGER,
+            gTarih TEXT,
+            cTarih TEXT,
+            yasKg REAL,
+            kuruKg REAL,
+            ortalama REAL,
+            koliSayisi INTEGER,
+            yakitToplam REAL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fcv_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            userId INTEGER NOT NULL,
+            tarih TEXT NOT NULL,
+            bocaSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            UNIQUE(userId, tarih),
+            FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fcv_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            gunlukId INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(gunlukId) REFERENCES fcv_kirim_gunluk(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS fcv_rask_dolum (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_dizim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_dizim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_dizim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            diziAdedi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_dizim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            yaprakSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_genel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kirim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kirim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            UNIQUE(dayibasi, tarih)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            bohcaSayisi INTEGER,
+            agirlik_id INTEGER,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kutulama (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kutulama_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kutulama_kuru_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_kutulama_sera_yas_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_sera (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT,
+            sera_no TEXT,
+            dizi_sayisi INTEGER,
+            dizi_kg1 REAL,
+            dizi_kg2 REAL,
+            dizi_kg3 REAL,
+            dizi_kg4 REAL,
+            dizi_kg5 REAL,
+            dizi_kg6 REAL,
+            bosaltma_tarihi TEXT,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS izmir_sera_yerleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sera_yeri TEXT NOT NULL UNIQUE,
+            toplam_sera_sayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        # --- PMI SCV DİZİM ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_dizim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            diziAdedi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            yaprakSayisi INTEGER NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        # --- PMI SCV KIRIM ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kirim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_gunluk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            bohcaSayisi INTEGER NOT NULL,
+            agirlik_id INTEGER,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_agirlik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            agirlik REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        # --- PMI SCV KUTULAMA ---
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            placeholder_col TEXT
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_dayibasi_table (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarih TEXT NOT NULL,
+            dayibasi TEXT NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_kuru_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_sera_yas_kg (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dayibasi_id INTEGER NOT NULL,
+            value REAL NOT NULL,
+            created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+            FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+        );''')
+        # --- INSERT INTO örnek veriler ---
+        conn.commit()
+        print("✅ SQLite tabloları ve başlangıç verileri başarıyla oluşturuldu.")
+        return True
+    except Exception as e:
+        print(f"❌ Tablo/veri oluşturma hatası: {e}")
+        return False
+    finally:
+        conn.close()
+
+def ensure_kutulama_alan_column():
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (alan sütunu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        # SQLite'da sütun kontrolü
+        cursor.execute("PRAGMA table_info(scv_kutulama)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'alan' not in columns:
+            print("'scv_kutulama' tablosuna 'alan' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE scv_kutulama ADD COLUMN alan TEXT")
+            conn.commit()
+            print("'alan' sütunu eklendi.")
+        else:
+            print("'alan' sütunu zaten var.")
+    except Exception as e:
+        print(f"'alan' sütunu eklenirken hata: {e}")
+    finally:
+        conn.close()
+
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
 @app.route('/api/register', methods=['POST'])
@@ -2326,8 +2613,8 @@ def home():
 
 if __name__ == '__main__':
     print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
-    if get_db_connection():
-        #ensure_kutulama_alan_column()
+    if initialize_db():
+        ensure_kutulama_alan_column()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
         port = int(os.environ.get("PORT", 5000))
