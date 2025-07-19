@@ -68,7 +68,7 @@ def initialize_db():
         return False
 
     try:
-    cursor = conn.cursor()
+        cursor = conn.cursor()
         cursor.execute('PRAGMA foreign_keys = ON;')
         
         # Tablo tanımları
@@ -582,7 +582,6 @@ def initialize_db():
             print("⚠️  Hiç tablo bulunamadı veya oluşturulamadı.")
         
         return True
-        
     except Exception as e:
         print(f"❌ Tablo oluşturma hatası: {e}")
         return False
