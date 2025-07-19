@@ -1620,28 +1620,38 @@ def add_or_update_pmi_scv_kirim_gunluk():
     if not dayibasi_id or bohcaSayisi is None:
         return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
 
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        bohcaSayisi = int(bohcaSayisi)
+        if agirlik_id is not None:
+            agirlik_id = int(agirlik_id)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi integer olmalıdır.'}), 400
+
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         # Kayıt var mı kontrol et
-        cursor.execute("SELECT id FROM pmi_scv_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM pmi_scv_kirim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            if agirlik_id:
-                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
+            if agirlik_id is not None:
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing[0]))
             else:
-                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
+                cursor.execute("UPDATE pmi_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
-            if agirlik_id:
+            if agirlik_id is not None:
                 cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
                 cursor.execute("INSERT INTO pmi_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, None))
             conn.commit()
             return jsonify({'message': 'Günlük eklendi.'}), 201
     except Exception as e:
+        print(f"PMI SCV KIRIM GUNLUK - Hata: {e}")
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
         if conn: conn.close()
