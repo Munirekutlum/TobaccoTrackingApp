@@ -465,13 +465,96 @@ def initialize_db():
                 sera_yeri TEXT NOT NULL,
                 sera_no TEXT NOT NULL,
                 sera_yas_kg REAL NOT NULL,
+                kutular TEXT NOT NULL,
                 toplam_kuru_kg REAL NOT NULL,
                 yas_kuru_orani REAL NOT NULL,
-                kutular TEXT NOT NULL,
-                sera_bosaltildi TEXT DEFAULT 'hayir',
                 alan TEXT NOT NULL,
+                sera_bosaltildi TEXT DEFAULT 'hayir',
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );'''
+            );''',
+            'pmi_scv_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'pmi_scv_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                diziAdedi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_scv_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                UNIQUE(dayibasi, tarih)
+            );''',
+            'pmi_topping_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                bohcaSayisi INTEGER,
+                agirlik_id INTEGER,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id)
+            );''',
+            'pmi_topping_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'pmi_topping_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                diziAdedi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'pmi_topping_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_kuru_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_sera_yas_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
         }
         
         created_tables = []
@@ -2457,8 +2540,7 @@ def add_scv_sera_yeri():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", 
-                      sera_yeri, toplam_sera_sayisi)
+        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", (sera_yeri, toplam_sera_sayisi))
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
     except sqlite3.IntegrityError:
