@@ -2582,7 +2582,7 @@ def get_scv_sera_yerleri_detay():
 @app.route('/api/scv_kutulama', methods=['POST'])
 def add_scv_kutulama():
     data = request.get_json()
-    required_fields = ['tarih', 'dayibasi', 'sera_yeri', 'sera_no', 'sera_yas_kg', 'kutular', 'toplam_kuru_kg', 'yas_kuru_orani']
+    required_fields = ['tarih', 'dayibasi', 'sera_yeri', 'sera_no', 'sera_yas_kg', 'kutular', 'toplam_kuru_kg', 'yas_kuru_orani', 'alan']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
     conn = get_db_connection()
@@ -2591,15 +2591,22 @@ def add_scv_kutulama():
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan, sera_bosaltildi)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
             data['tarih'], data['dayibasi'], data['sera_yeri'], data['sera_no'], 
             data['sera_yas_kg'], data['kutular'], data['toplam_kuru_kg'], data['yas_kuru_orani'],
-            data.get('alan')
+            data.get('alan'), data.get('sera_bosaltildi', 'hayir')
         )
         cursor.execute(sql, params)
+        # Eğer sera boşaltıldıysa, scv_sera tablosunda dizi_sayisi=0 ve bosaltma_tarihi güncellenmeli
+        if data.get('sera_bosaltildi') == 'evet':
+            from datetime import datetime
+            cursor.execute(
+                "UPDATE scv_sera SET dizi_sayisi = 0, bosaltma_tarihi = ? WHERE sera_yeri = ? AND sera_no = ?",
+                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data['sera_yeri'], data['sera_no'])
+            )
         conn.commit()
         return jsonify({'message': 'Kutulama kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2889,13 +2896,15 @@ def get_scv_kutulama_summary():
         genel_toplam_kg = 0
         
         for row in kutulama_kayitlari:
-            alan = (row.alan or '').strip().upper()
-            kutular_json = row.kutular
-            toplam_kg = row.toplam_kuru_kg or 0
+            # Dict veya attribute erişimi destekle
+            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
+            alan = alan.strip().upper()
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
             try:
-                kutular_array = json.loads(kutular_json)
+                kutular_array = json.loads(kutular_json) if kutular_json else []
                 kutu_sayisi = len([k for k in kutular_array if k and k > 0])
-            except:
+            except Exception:
                 kutu_sayisi = 0
             if alan not in alan_istatistik:
                 alan_istatistik[alan] = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
