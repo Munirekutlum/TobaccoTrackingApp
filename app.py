@@ -68,7 +68,7 @@ def initialize_db():
         return False
 
     try:
-        cursor = conn.cursor()
+    cursor = conn.cursor()
         cursor.execute('PRAGMA foreign_keys = ON;')
         
         # Tablo tanımları
@@ -2855,6 +2855,13 @@ def add_izmir_kutulama():
             data.get('toplam_kuru_kg'),
             data.get('yas_kuru_orani')
         ))
+        # Eğer sera_bosaltildi == 'evet' ise izmir_sera tablosunda dizi_sayisi=0 ve bosaltma_tarihi güncellenmeli
+        if data.get('sera_bosaltildi') == 'evet':
+            from datetime import datetime
+            cursor.execute(
+                "UPDATE izmir_sera SET dizi_sayisi = 0, bosaltma_tarihi = ? WHERE sera_yeri = ? AND sera_no = ?",
+                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data.get('sera_yeri'), data.get('sera_no'))
+            )
         conn.commit()
         cursor.close()
         conn.close()
@@ -2896,13 +2903,13 @@ def get_scv_kutulama_summary():
         genel_toplam_kg = 0
         
         for row in kutulama_kayitlari:
-            # Dict veya attribute erişimi destekle
             alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
             alan = alan.strip().upper()
             kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
             toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
             try:
                 kutular_array = json.loads(kutular_json) if kutular_json else []
+                # Kutu sayısı: 0'dan büyük olan kutuların sayısı
                 kutu_sayisi = len([k for k in kutular_array if k and k > 0])
             except Exception:
                 kutu_sayisi = 0
@@ -2921,7 +2928,6 @@ def get_scv_kutulama_summary():
         # Standart başlıklar
         def get_alan(anahtar):
             for k in alan_istatistik:
-                # Hem tire hem de boşluk ile arama yap
                 if anahtar in k or anahtar.replace(' ', '-') in k or anahtar.replace('-', ' ') in k:
                     return alan_istatistik[k]
             return {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
@@ -2945,6 +2951,64 @@ def get_scv_kutulama_summary():
 @app.route("/")
 def home():
     return "API çalışıyor!"
+
+def get_genel_stok():
+    conn = get_db_connection()
+    if not conn:
+        return {'kutu': 0, 'kg': 0}
+    try:
+        cursor = conn.cursor()
+        # SCV kutulama
+        cursor.execute("SELECT kutular, toplam_kuru_kg FROM scv_kutulama")
+        scv_rows = cursor.fetchall()
+        scv_kutu = 0
+        scv_kg = 0
+        for row in scv_rows:
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            try:
+                kutular = json.loads(kutular_json) if kutular_json else []
+                scv_kutu += len([k for k in kutular if k and k > 0])
+            except Exception:
+                pass
+            scv_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+        # İzmir kutulama
+        cursor.execute("SELECT kutular, toplam_kuru_kg FROM izmir_kutulama")
+        izmir_rows = cursor.fetchall()
+        izmir_kutu = 0
+        izmir_kg = 0
+        for row in izmir_rows:
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            try:
+                kutular = json.loads(kutular_json) if kutular_json else []
+                izmir_kutu += len([k for k in kutular if k and k > 0])
+            except Exception:
+                pass
+            izmir_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+        return {'kutu': scv_kutu + izmir_kutu, 'kg': scv_kg + izmir_kg}
+    except Exception as e:
+        print(f"Genel stok hesaplama hatası: {e}")
+        return {'kutu': 0, 'kg': 0}
+    finally:
+        conn.close()
+
+# Sevkiyat ekleme endpoint örneği (varsa, yoksa ekleyin):
+@app.route('/api/sevkiyat', methods=['POST'])
+def add_sevkiyat():
+    data = request.get_json()
+    istenen_kutu = int(data.get('kutu', 0))
+    istenen_kg = float(data.get('kg', 0))
+    stok = get_genel_stok()
+    if istenen_kutu > stok['kutu'] or istenen_kg > stok['kg']:
+        return jsonify({'message': 'Stokta o kadar ürün yok!'}), 400
+    # Burada sevkiyat kaydını ekle (örnek):
+    # ...
+    return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
+
+# Genel stok endpoint örneği:
+@app.route('/api/genel_stok', methods=['GET'])
+def genel_stok():
+    stok = get_genel_stok()
+    return jsonify(stok)
 
 if __name__ == '__main__':
     print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
