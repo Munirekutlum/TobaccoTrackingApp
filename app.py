@@ -1193,54 +1193,42 @@ def get_jti_scv_kirim_summary():
 @app.route('/api/jti_scv_kirim/gunluk', methods=['POST'])
 def add_or_update_jti_scv_kirim_gunluk():
     data = request.get_json()
-    print(f"JTI SCV KIRIM GUNLUK - Gelen veri: {data}")
-    
     dayibasi_id = data.get('dayibasi_id')
     bohcaSayisi = data.get('bohcaSayisi')
     agirlik_id = data.get('agirlik_id')  # opsiyonel
 
-    print(f"dayibasi_id: {dayibasi_id}, bohcaSayisi: {bohcaSayisi}, agirlik_id: {agirlik_id}")
-
     if not dayibasi_id or bohcaSayisi is None:
-        print("Eksik parametreler")
         return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
 
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        bohcaSayisi = int(bohcaSayisi)
+        if agirlik_id is not None:
+            agirlik_id = int(agirlik_id)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id ve bohcaSayisi integer olmalıdır.'}), 400
+
     conn = get_db_connection()
-    if not conn: 
-        print("Veritabanı bağlantı hatası")
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        
-        # Önce dayibasi_id'nin mevcut olup olmadığını kontrol et
-        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", dayibasi_id)
-        dayibasi_exists = cursor.fetchone()
-        print(f"Dayıbaşı mevcut mu: {dayibasi_exists}")
-        
-        if not dayibasi_exists:
-            print(f"Dayıbaşı ID {dayibasi_id} bulunamadı")
-            return jsonify({'message': f'Dayıbaşı ID {dayibasi_id} bulunamadı. Önce dayıbaşı kaydı oluşturun.'}), 400
-        
         # Kayıt var mı kontrol et
-        cursor.execute("SELECT id FROM jti_scv_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM jti_scv_kirim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
-        print(f"Mevcut kayıt: {existing}")
-        
         if existing:
-            if agirlik_id:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
+            if agirlik_id is not None:
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing[0]))
             else:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
+                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing[0]))
             conn.commit()
-            print("Günlük güncellendi")
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
-            if agirlik_id:
+            if agirlik_id is not None:
                 cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
-                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, None))
+                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi) VALUES (?, ?)", (dayibasi_id, bohcaSayisi))
             conn.commit()
-            print("Günlük eklendi")
             return jsonify({'message': 'Günlük eklendi.'}), 201
     except Exception as e:
         print(f"JTI SCV KIRIM GUNLUK - Hata: {e}")
