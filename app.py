@@ -1261,6 +1261,14 @@ def add_jti_scv_kirim_agirlik():
         print("Eksik parametreler")
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
 
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        agirlik = float(agirlik)
+    except (ValueError, TypeError):
+        print("Veri tipi dönüşüm hatası")
+        return jsonify({'message': 'dayibasi_id integer, agirlik float olmalıdır.'}), 400
+
     conn = get_db_connection()
     if not conn: 
         print("Veritabanı bağlantı hatası")
@@ -1269,7 +1277,7 @@ def add_jti_scv_kirim_agirlik():
         cursor = conn.cursor()
         
         # Önce dayibasi_id'nin mevcut olup olmadığını kontrol et
-        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", (dayibasi_id,))
         dayibasi_exists = cursor.fetchone()
         print(f"Dayıbaşı mevcut mu: {dayibasi_exists}")
         
@@ -1408,11 +1416,20 @@ def add_jti_scv_dizim_agirlik():
     dayibasi_id = data.get('dayibasi_id')
     if not agirlik or not dayibasi_id or not yaprakSayisi:
         return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        agirlik = float(agirlik)
+        yaprakSayisi = int(yaprakSayisi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id integer, agirlik float, yaprakSayisi integer olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
+        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1446,18 +1463,27 @@ def add_or_update_jti_scv_dizim_gunluk():
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id ve diziAdedi integer olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        # Kayıt var mı kontrol et
+        cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
+            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi) VALUES (?, ?)", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
