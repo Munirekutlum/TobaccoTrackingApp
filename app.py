@@ -3518,7 +3518,7 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
     finally:
         conn.close()
 
-@app.route('/api/jti_scv_kirim/agirlik/<int:agirlik_id>', methods=['PUT', 'OPTIONS'])
+@app.route('/api/jti_scv_kirim/agirlik/<int:agirlik_id>', methods=['PUT'])
 def update_jti_scv_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
