@@ -217,6 +217,7 @@ def initialize_db():
                 dizi_kg5 REAL,
                 dizi_kg6 REAL,
                 bosaltma_tarihi TEXT,
+                sera_bosaltildi TEXT DEFAULT 'hayir',
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );''',
             'izmir_sera_yerleri': '''CREATE TABLE IF NOT EXISTS izmir_sera_yerleri (
@@ -564,6 +565,13 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
             );''',
+            'sevkiyat': '''CREATE TABLE IF NOT EXISTS sevkiyat (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT,
+                kutu INTEGER,
+                kg REAL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
         }
         
         created_tables = []
@@ -631,6 +639,27 @@ def ensure_izmir_kutulama_sera_bosaltildi_column():
         if 'sera_bosaltildi' not in columns:
             print("'izmir_kutulama' tablosuna 'sera_bosaltildi' sütunu ekleniyor...")
             cursor.execute("ALTER TABLE izmir_kutulama ADD COLUMN sera_bosaltildi TEXT DEFAULT 'hayir'")
+            conn.commit()
+            print("'sera_bosaltildi' sütunu eklendi.")
+        else:
+            print("'sera_bosaltildi' sütunu zaten var.")
+    except Exception as e:
+        print(f"'sera_bosaltildi' sütunu eklenirken hata: {e}")
+    finally:
+        conn.close()
+
+def ensure_izmir_sera_bosaltildi_column():
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (izmir_sera sera_bosaltildi sütunu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(izmir_sera)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'sera_bosaltildi' not in columns:
+            print("'izmir_sera' tablosuna 'sera_bosaltildi' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE izmir_sera ADD COLUMN sera_bosaltildi TEXT DEFAULT 'hayir'")
             conn.commit()
             print("'sera_bosaltildi' sütunu eklendi.")
         else:
@@ -1116,7 +1145,7 @@ def add_izmir_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, created_at) VALUES (?, ?, ?, GETDATE())", (dayibasi_id, agirlik, yaprakSayisi))
+        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi))
         conn.commit()
         return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2884,11 +2913,11 @@ def add_izmir_kutulama():
             data.get('yas_kuru_orani'),
             data.get('sera_bosaltildi', 'hayir')
         ))
-        # Eğer sera_bosaltildi == 'evet' ise izmir_sera tablosunda dizi_sayisi=0 ve bosaltma_tarihi güncellenmeli
+        # Eğer sera_bosaltildi == 'evet' ise izmir_sera tablosunda dizi_sayisi=0, bosaltma_tarihi ve sera_bosaltildi güncellenmeli
         if data.get('sera_bosaltildi') == 'evet':
             from datetime import datetime
             cursor.execute(
-                "UPDATE izmir_sera SET dizi_sayisi = 0, bosaltma_tarihi = ? WHERE sera_yeri = ? AND sera_no = ?",
+                "UPDATE izmir_sera SET dizi_sayisi = 0, bosaltma_tarihi = ?, sera_bosaltildi = 'evet' WHERE sera_yeri = ? AND sera_no = ?",
                 (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data.get('sera_yeri'), data.get('sera_no'))
             )
         conn.commit()
@@ -3028,10 +3057,65 @@ def add_sevkiyat():
     istenen_kg = float(data.get('kg', 0))
     stok = get_genel_stok()
     if istenen_kutu > stok['kutu'] or istenen_kg > stok['kg']:
-        return jsonify({'message': 'Stokta o kadar ürün yok!'}), 400
-    # Burada sevkiyat kaydını ekle (örnek):
-    # ...
-    return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
+        return jsonify({'message': 'Stokta o kadar ürün yok! Lütfen kutu adedi ve kg değerlerini kontrol edin.'}), 400
+    # Stoktan düşme işlemi: (örnek, izmir_kutulama ve scv_kutulama'dan sırayla düş)
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Önce SCV kutulama kayıtlarından düş
+        cursor.execute("SELECT id, kutular, toplam_kuru_kg FROM scv_kutulama ORDER BY id ASC")
+        scv_rows = cursor.fetchall()
+        kalan_kutu = istenen_kutu
+        kalan_kg = istenen_kg
+        for row in scv_rows:
+            kutular = json.loads(row['kutular']) if row['kutular'] else []
+            kutu_sayisi = len([k for k in kutular if k and k > 0])
+            kg = row['toplam_kuru_kg'] or 0
+            if kalan_kutu <= 0 and kalan_kg <= 0:
+                break
+            silinecek_kutu = min(kalan_kutu, kutu_sayisi)
+            silinecek_kg = min(kalan_kg, kg)
+            if silinecek_kutu > 0 or silinecek_kg > 0:
+                # Kutu ve kg'dan düş
+                yeni_kutu = max(0, kutu_sayisi - silinecek_kutu)
+                yeni_kg = max(0, kg - silinecek_kg)
+                # Kutu dizisini güncelle
+                yeni_kutular = kutular[:]
+                for i in range(silinecek_kutu):
+                    if yeni_kutular and yeni_kutular[i] > 0:
+                        yeni_kutular[i] = 0
+                cursor.execute("UPDATE scv_kutulama SET kutular = ?, toplam_kuru_kg = ? WHERE id = ?", (json.dumps(yeni_kutular), yeni_kg, row['id']))
+                kalan_kutu -= silinecek_kutu
+                kalan_kg -= silinecek_kg
+        # Sonra İzmir kutulama kayıtlarından düş
+        cursor.execute("SELECT id, kutular, toplam_kuru_kg FROM izmir_kutulama ORDER BY id ASC")
+        izmir_rows = cursor.fetchall()
+        for row in izmir_rows:
+            kutular = json.loads(row['kutular']) if row['kutular'] else []
+            kutu_sayisi = len([k for k in kutular if k and k > 0])
+            kg = row['toplam_kuru_kg'] or 0
+            if kalan_kutu <= 0 and kalan_kg <= 0:
+                break
+            silinecek_kutu = min(kalan_kutu, kutu_sayisi)
+            silinecek_kg = min(kalan_kg, kg)
+            if silinecek_kutu > 0 or silinecek_kg > 0:
+                yeni_kutu = max(0, kutu_sayisi - silinecek_kutu)
+                yeni_kg = max(0, kg - silinecek_kg)
+                yeni_kutular = kutular[:]
+                for i in range(silinecek_kutu):
+                    if yeni_kutular and yeni_kutular[i] > 0:
+                        yeni_kutular[i] = 0
+                cursor.execute("UPDATE izmir_kutulama SET kutular = ?, toplam_kuru_kg = ? WHERE id = ?", (json.dumps(yeni_kutular), yeni_kg, row['id']))
+                kalan_kutu -= silinecek_kutu
+                kalan_kg -= silinecek_kg
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
 
 # Genel stok endpoint örneği:
 @app.route('/api/genel_stok', methods=['GET'])
@@ -3044,6 +3128,7 @@ if __name__ == '__main__':
     if initialize_db():
         ensure_kutulama_alan_column()
         ensure_izmir_kutulama_sera_bosaltildi_column()
+        ensure_izmir_sera_bosaltildi_column()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
         port = int(os.environ.get("PORT", 5000))
