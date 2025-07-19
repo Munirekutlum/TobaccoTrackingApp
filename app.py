@@ -66,7 +66,7 @@ def initialize_db():
     if not conn:
         print("Veritabanı bağlantı hatası (initialize_db)")
         return False
-    
+
     try:
         cursor = conn.cursor()
         cursor.execute('PRAGMA foreign_keys = ON;')
@@ -216,6 +216,80 @@ def initialize_db():
                 toplam_sera_sayisi INTEGER NOT NULL,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );''',
+            'jti_scv_kirim': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'jti_scv_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                UNIQUE(dayibasi, tarih)
+            );''',
+            'jti_scv_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                bohcaSayisi INTEGER,
+                agirlik_id INTEGER,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id)
+            );''',
+            'jti_scv_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'jti_scv_dizim': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'jti_scv_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'jti_scv_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                diziAdedi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'jti_scv_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'jti_scv_kutulama': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'jti_scv_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'jti_scv_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_kuru_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'jti_scv_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_sera_yas_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
             'pmi_scv_dizim': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 placeholder_col TEXT
@@ -288,6 +362,115 @@ def initialize_db():
                 value REAL NOT NULL,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kirim': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'pmi_topping_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                UNIQUE(dayibasi, tarih)
+            );''',
+            'pmi_topping_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                bohcaSayisi INTEGER,
+                agirlik_id INTEGER,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id)
+            );''',
+            'pmi_topping_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_dizim': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'pmi_topping_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'pmi_topping_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_gunluk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                diziAdedi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kutulama': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                placeholder_col TEXT
+            );''',
+            'pmi_topping_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_dayibasi_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'pmi_topping_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_kuru_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_sera_yas_kg (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                dayibasi_id INTEGER NOT NULL,
+                value REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
+            );''',
+            'scv_sera': '''CREATE TABLE IF NOT EXISTS scv_sera (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sera_yeri TEXT,
+                alan TEXT,
+                sera_no TEXT,
+                dizi_sayisi INTEGER,
+                dizi_kg1 REAL,
+                dizi_kg2 REAL,
+                dizi_kg3 REAL,
+                dizi_kg4 REAL,
+                dizi_kg5 REAL,
+                dizi_kg6 REAL,
+                bosaltma_tarihi TEXT,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'scv_sera_yerleri': '''CREATE TABLE IF NOT EXISTS scv_sera_yerleri (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sera_yeri TEXT NOT NULL UNIQUE,
+                toplam_sera_sayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'scv_kutulama': '''CREATE TABLE IF NOT EXISTS scv_kutulama (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                sera_yeri TEXT NOT NULL,
+                sera_no TEXT NOT NULL,
+                sera_yas_kg REAL NOT NULL,
+                toplam_kuru_kg REAL NOT NULL,
+                yas_kuru_orani REAL NOT NULL,
+                kutular TEXT NOT NULL,
+                sera_bosaltildi TEXT DEFAULT 'hayir',
+                alan TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );'''
         }
         
