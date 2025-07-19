@@ -7,7 +7,7 @@ import json
 import os
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers="*", supports_credentials=True)
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'veritabani.sqlite3')
 
@@ -3399,6 +3399,138 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/fcv_kirim/gunluk/<int:gunluk_id>', methods=['PUT'])
+def update_fcv_kirim_gunluk(gunluk_id):
+    data = request.get_json()
+    bohcaSayisi = data.get('bocaSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if bohcaSayisi is None:
+        return jsonify({'message': 'bocaSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE fcv_kirim_gunluk SET bocaSayisi = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, yazici_adi, gunluk_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/izmir_kirim/gunluk/<int:gunluk_id>', methods=['PUT'])
+def update_izmir_kirim_gunluk(gunluk_id):
+    data = request.get_json()
+    bohcaSayisi = data.get('bohcaSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if bohcaSayisi is None:
+        return jsonify({'message': 'bohcaSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, yazici_adi, gunluk_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/jti_scv_dizim/gunluk/<int:gunluk_id>', methods=['PUT'])
+def update_jti_scv_dizim_gunluk(gunluk_id):
+    data = request.get_json()
+    diziAdedi = data.get('diziAdedi')
+    yazici_adi = data.get('yazici_adi')
+    if diziAdedi is None:
+        return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_scv_dizim/gunluk/<int:gunluk_id>', methods=['PUT'])
+def update_pmi_scv_dizim_gunluk(gunluk_id):
+    data = request.get_json()
+    diziAdedi = data.get('diziAdedi')
+    yazici_adi = data.get('yazici_adi')
+    if diziAdedi is None:
+        return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_topping_dizim/gunluk/<int:gunluk_id>', methods=['PUT'])
+def update_pmi_topping_dizim_gunluk(gunluk_id):
+    data = request.get_json()
+    diziAdedi = data.get('diziAdedi')
+    yazici_adi = data.get('yazici_adi')
+    if diziAdedi is None:
+        return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/jti_scv_kirim/agirlik/<int:agirlik_id>', methods=['PUT', 'OPTIONS'])
+def update_jti_scv_kirim_agirlik(agirlik_id):
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yazici_adi = data.get('yazici_adi')
+    if agirlik is None:
+        return jsonify({'message': 'agirlik zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE jti_scv_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
