@@ -174,7 +174,16 @@ def initialize_db():
             );''',
             'izmir_kutulama': '''CREATE TABLE IF NOT EXISTS izmir_kutulama (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
+                tarih TEXT NOT NULL,
+                dayibasi TEXT NOT NULL,
+                sera_yeri TEXT NOT NULL,
+                sera_no TEXT NOT NULL,
+                sera_yas_kg REAL NOT NULL,
+                kutular TEXT NOT NULL,
+                toplam_kuru_kg REAL NOT NULL,
+                yas_kuru_orani REAL NOT NULL,
+                sera_bosaltildi TEXT DEFAULT 'hayir',
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );''',
             'izmir_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS izmir_kutulama_dayibasi_table (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -610,6 +619,27 @@ def ensure_kutulama_alan_column():
     finally:
         conn.close()
 
+def ensure_izmir_kutulama_sera_bosaltildi_column():
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (izmir_kutulama sera_bosaltildi sütunu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(izmir_kutulama)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'sera_bosaltildi' not in columns:
+            print("'izmir_kutulama' tablosuna 'sera_bosaltildi' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE izmir_kutulama ADD COLUMN sera_bosaltildi TEXT DEFAULT 'hayir'")
+            conn.commit()
+            print("'sera_bosaltildi' sütunu eklendi.")
+        else:
+            print("'sera_bosaltildi' sütunu zaten var.")
+    except Exception as e:
+        print(f"'sera_bosaltildi' sütunu eklenirken hata: {e}")
+    finally:
+        conn.close()
+
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
 @app.route('/api/register', methods=['POST'])
@@ -932,18 +962,17 @@ def add_or_update_izmir_kirim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        # Kayıt var mı kontrol et
-        cursor.execute("SELECT id FROM izmir_kirim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM izmir_kirim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            if agirlik_id:
-                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing.id))
+            if agirlik_id is not None:
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ? WHERE id = ?", (bohcaSayisi, agirlik_id, existing[0]))
             else:
-                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing.id))
+                cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ? WHERE id = ?", (bohcaSayisi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Günlük güncellendi.'}), 200
         else:
-            if agirlik_id:
+            if agirlik_id is not None:
                 cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id))
             else:
                 cursor.execute("INSERT INTO izmir_kirim_gunluk (dayibasi_id, bohcaSayisi) VALUES (?, ?)", (dayibasi_id, bohcaSayisi))
@@ -1125,14 +1154,14 @@ def add_or_update_izmir_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM izmir_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM izmir_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing.id))
+            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ? WHERE id = ?", (diziAdedi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi, created_at) VALUES (?, ?, GETDATE())", (dayibasi_id, diziAdedi))
+            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi) VALUES (?, ?)", (dayibasi_id, diziAdedi))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -2770,7 +2799,7 @@ def add_izmir_sera_yeri():
     try:
         cursor = conn.cursor()
         cursor.execute("INSERT INTO izmir_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", 
-                      sera_yeri, toplam_sera_sayisi)
+                      (sera_yeri, toplam_sera_sayisi))
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
     except sqlite3.IntegrityError:
@@ -2842,8 +2871,8 @@ def add_izmir_kutulama():
     try:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO izmir_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO izmir_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, sera_bosaltildi)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data.get('tarih'),
             data.get('dayibasi'),
@@ -2852,7 +2881,8 @@ def add_izmir_kutulama():
             data.get('sera_yas_kg'),
             data.get('kutular'),
             data.get('toplam_kuru_kg'),
-            data.get('yas_kuru_orani')
+            data.get('yas_kuru_orani'),
+            data.get('sera_bosaltildi', 'hayir')
         ))
         # Eğer sera_bosaltildi == 'evet' ise izmir_sera tablosunda dizi_sayisi=0 ve bosaltma_tarihi güncellenmeli
         if data.get('sera_bosaltildi') == 'evet':
@@ -3013,6 +3043,7 @@ if __name__ == '__main__':
     print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
         ensure_kutulama_alan_column()
+        ensure_izmir_kutulama_sera_bosaltildi_column()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
         port = int(os.environ.get("PORT", 5000))
