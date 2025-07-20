@@ -283,7 +283,6 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
@@ -334,7 +333,6 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
@@ -438,7 +436,6 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
@@ -522,7 +519,6 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
@@ -568,7 +564,6 @@ def initialize_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
@@ -599,6 +594,30 @@ def initialize_db():
                 kutu INTEGER,
                 kg REAL,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'jti_scv_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_yaprak (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agirlik_id INTEGER NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                yazici_adi TEXT,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(agirlik_id) REFERENCES jti_scv_dizim_agirlik(id) ON DELETE CASCADE
+            );''',
+            'pmi_scv_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_yaprak (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agirlik_id INTEGER NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                yazici_adi TEXT,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(agirlik_id) REFERENCES pmi_scv_dizim_agirlik(id) ON DELETE CASCADE
+            );''',
+            'pmi_topping_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_yaprak (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agirlik_id INTEGER NOT NULL,
+                yaprakSayisi INTEGER NOT NULL,
+                yazici_adi TEXT,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(agirlik_id) REFERENCES pmi_topping_dizim_agirlik(id) ON DELETE CASCADE
             );''',
         }
         
@@ -1572,25 +1591,22 @@ def add_jti_scv_dizim_dayibasi():
 def add_jti_scv_dizim_agirlik():
     data = request.get_json()
     agirlik = data.get('agirlik')
-    yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
+    yazici_adi = data.get('yazici_adi')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
-    # Veri tipi dönüşümleri
     try:
         dayibasi_id = int(dayibasi_id)
         agirlik = float(agirlik)
-        if yaprakSayisi is not None:
-            yaprakSayisi = int(yaprakSayisi)
     except (ValueError, TypeError):
-        return jsonify({'message': 'dayibasi_id integer, agirlik float, yaprakSayisi integer olmalıdır.'}), 400
+        return jsonify({'message': 'dayibasi_id integer, agirlik float olmalıdır.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, yazici_adi) VALUES (?, ?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi, data['yazici_adi']))
+        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
-        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
@@ -1956,17 +1972,17 @@ def add_pmi_scv_dizim_dayibasi():
 def add_pmi_scv_dizim_agirlik():
     data = request.get_json()
     agirlik = data.get('agirlik')
-    yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
+    yazici_adi = data.get('yazici_adi')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, yazici_adi) VALUES (?, ?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi, data['yazici_adi']))
+        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
-        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
@@ -2311,17 +2327,17 @@ def add_pmi_topping_dizim_dayibasi():
 def add_pmi_topping_dizim_agirlik():
     data = request.get_json()
     agirlik = data.get('agirlik')
-    yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
+    yazici_adi = data.get('yazici_adi')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, yazici_adi) VALUES (?, ?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi, data['yazici_adi']))
+        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
-        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
+        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
@@ -3533,6 +3549,128 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
     finally:
         conn.close()
 
+@app.route('/api/jti_scv_dizim_yaprak', methods=['POST'])
+def add_jti_scv_dizim_yaprak():
+    data = request.get_json()
+    agirlik_id = data.get('agirlik_id')
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if not agirlik_id or yaprakSayisi is None:
+        return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO jti_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        conn.commit()
+        return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/jti_scv_dizim_yaprak/<int:yaprak_id>', methods=['PUT'])
+def update_jti_scv_dizim_yaprak(yaprak_id):
+    data = request.get_json()
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if yaprakSayisi is None:
+        return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE jti_scv_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_scv_dizim_yaprak', methods=['POST'])
+def add_pmi_scv_dizim_yaprak():
+    data = request.get_json()
+    agirlik_id = data.get('agirlik_id')
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if not agirlik_id or yaprakSayisi is None:
+        return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        conn.commit()
+        return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_scv_dizim_yaprak/<int:yaprak_id>', methods=['PUT'])
+def update_pmi_scv_dizim_yaprak(yaprak_id):
+    data = request.get_json()
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if yaprakSayisi is None:
+        return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE pmi_scv_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_topping_dizim_yaprak', methods=['POST'])
+def add_pmi_topping_dizim_yaprak():
+    data = request.get_json()
+    agirlik_id = data.get('agirlik_id')
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if not agirlik_id or yaprakSayisi is None:
+        return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO pmi_topping_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        conn.commit()
+        return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_topping_dizim_yaprak/<int:yaprak_id>', methods=['PUT'])
+def update_pmi_topping_dizim_yaprak(yaprak_id):
+    data = request.get_json()
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if yaprakSayisi is None:
+        return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE pmi_topping_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
 
 if __name__ == '__main__':
     print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
