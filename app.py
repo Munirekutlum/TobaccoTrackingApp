@@ -1524,6 +1524,7 @@ def get_jti_scv_dizim_summary():
                 d.dayibasi,
                 g.id as gunluk_id,
                 g.diziAdedi,
+                g.yazici_adi,
                 (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
                 (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
             FROM jti_scv_dizim_dayibasi_table d
@@ -1907,6 +1908,7 @@ def get_pmi_scv_dizim_summary():
                 d.dayibasi,
                 g.id as gunluk_id,
                 g.diziAdedi,
+                g.yazici_adi,
                 (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
                 (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
             FROM pmi_scv_dizim_dayibasi_table d
@@ -2261,6 +2263,7 @@ def get_pmi_topping_dizim_summary():
                 d.dayibasi,
                 g.id as gunluk_id,
                 g.diziAdedi,
+                g.yazici_adi,
                 (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
                 (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
             FROM pmi_topping_dizim_dayibasi_table d
