@@ -619,6 +619,29 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(agirlik_id) REFERENCES pmi_topping_dizim_agirlik(id) ON DELETE CASCADE
             );''',
+            # --- JTI SCV KIRIM yeni sistem için ---
+            'traktor_gelis_jti_kirim': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tarih TEXT NOT NULL,
+                plaka TEXT NOT NULL,
+                gelis_no INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                UNIQUE(tarih, plaka, gelis_no)
+            );''',
+            'traktor_gelis_jti_kirim_dayibasi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim_dayibasi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                traktor_gelis_jti_kirim_id INTEGER NOT NULL,
+                dayibasi_adi TEXT NOT NULL,
+                bohca_sayisi INTEGER NOT NULL,
+                FOREIGN KEY(traktor_gelis_jti_kirim_id) REFERENCES traktor_gelis_jti_kirim(id) ON DELETE CASCADE
+            );''',
+            'traktor_gelis_jti_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim_agirlik (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                traktor_gelis_jti_kirim_id INTEGER NOT NULL,
+                agirlik REAL NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY(traktor_gelis_jti_kirim_id) REFERENCES traktor_gelis_jti_kirim(id) ON DELETE CASCADE
+            );''',
         }
         
         created_tables = []
@@ -1345,190 +1368,6 @@ def add_izmir_kutulama_sera_yas_kg():
         if conn: conn.close()
 
 #------------------------------------------------------------------------------------------------------------
-#---scv jtı KIRIM api endpointleri-------
-@app.route('/api/jti_scv_kirim/summary', methods=['GET'])
-def get_jti_scv_kirim_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
-                g.bohcaSayisi,
-                g.agirlik_id,
-                g.yazici_adi,
-                (SELECT COUNT(a.id) FROM jti_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                (SELECT AVG(a.agirlik) FROM jti_scv_kirim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
-            FROM jti_scv_kirim_dayibasi_table d
-            LEFT JOIN jti_scv_kirim_gunluk g ON d.id = g.dayibasi_id
-            ORDER BY d.tarih DESC, d.dayibasi
-        """)
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            if r['ortalamaAgirlik'] and r['bohcaSayisi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
-            else:
-                r['toplamTahminiKg'] = 0
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kirim/gunluk', methods=['POST'])
-def add_or_update_jti_scv_kirim_gunluk():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    bohcaSayisi = data.get('bohcaSayisi')
-    agirlik_id = data.get('agirlik_id')  # opsiyonel
-
-    if not dayibasi_id or bohcaSayisi is None:
-        return jsonify({'message': 'dayibasi_id ve bohcaSayisi zorunludur.'}), 400
-
-    # Veri tipi dönüşümleri
-    try:
-        dayibasi_id = int(dayibasi_id)
-        bohcaSayisi = int(bohcaSayisi)
-        if agirlik_id is not None:
-            agirlik_id = int(agirlik_id)
-    except (ValueError, TypeError):
-        return jsonify({'message': 'dayibasi_id ve bohcaSayisi integer olmalıdır.'}), 400
-
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        # Kayıt var mı kontrol et
-        cursor.execute("SELECT id FROM jti_scv_kirim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
-        existing = cursor.fetchone()
-        if existing:
-            if agirlik_id is not None:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, agirlik_id = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, agirlik_id, data['yazici_adi'], existing[0]))
-            else:
-                cursor.execute("UPDATE jti_scv_kirim_gunluk SET bohcaSayisi = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, data['yazici_adi'], existing[0]))
-            conn.commit()
-            return jsonify({'message': 'Günlük güncellendi.'}), 200
-        else:
-            if agirlik_id is not None:
-                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, agirlik_id, yazici_adi) VALUES (?, ?, ?, ?)", (dayibasi_id, bohcaSayisi, agirlik_id, data['yazici_adi']))
-            else:
-                cursor.execute("INSERT INTO jti_scv_kirim_gunluk (dayibasi_id, bohcaSayisi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, bohcaSayisi, data['yazici_adi']))
-            conn.commit()
-            return jsonify({'message': 'Günlük eklendi.'}), 201
-    except Exception as e:
-        print(f"JTI SCV KIRIM GUNLUK - Hata: {e}")
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kirim/agirlik', methods=['POST'])
-def add_jti_scv_kirim_agirlik():
-    data = request.get_json()
-    print(f"JTI SCV KIRIM AGIRLIK - Gelen veri: {data}")
-    
-    agirlik = data.get('agirlik')
-    dayibasi_id = data.get('dayibasi_id')
-    print(f"agirlik: {agirlik}, dayibasi_id: {dayibasi_id}")
-    
-    if not agirlik or not dayibasi_id:
-        print("Eksik parametreler")
-        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
-
-    # Veri tipi dönüşümleri
-    try:
-        dayibasi_id = int(dayibasi_id)
-        agirlik = float(agirlik)
-    except (ValueError, TypeError):
-        print("Veri tipi dönüşüm hatası")
-        return jsonify({'message': 'dayibasi_id integer, agirlik float olmalıdır.'}), 400
-
-    conn = get_db_connection()
-    if not conn: 
-        print("Veritabanı bağlantı hatası")
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        
-        # Önce dayibasi_id'nin mevcut olup olmadığını kontrol et
-        cursor.execute("SELECT id FROM jti_scv_kirim_dayibasi_table WHERE id = ?", (dayibasi_id,))
-        dayibasi_exists = cursor.fetchone()
-        print(f"Dayıbaşı mevcut mu: {dayibasi_exists}")
-        
-        if not dayibasi_exists:
-            print(f"Dayıbaşı ID {dayibasi_id} bulunamadı")
-            return jsonify({'message': f'Dayıbaşı ID {dayibasi_id} bulunamadı. Önce dayıbaşı kaydı oluşturun.'}), 400
-        
-        cursor.execute("INSERT INTO jti_scv_kirim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, data['yazici_adi']))
-        conn.commit()
-        print("Ağırlık başarıyla eklendi")
-        return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
-    except Exception as e:
-        print(f"JTI SCV KIRIM AGIRLIK - Hata: {e}")
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kirim/agirlik/details', methods=['GET'])
-def get_jti_scv_kirim_agirlik_details():
-    dayibasi_id = request.args.get('dayibasi_id')
-    if not dayibasi_id:
-        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, created_at FROM jti_scv_kirim_agirlik WHERE dayibasi_id = ? ORDER BY id"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql, (dayibasi_id,))
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kirim/dayibasi', methods=['POST'])
-def add_jti_scv_kirim_dayibasi():
-    data = request.get_json()
-    print(f"JTI SCV KIRIM DAYIBASI - Gelen veri: {data}")
-    
-    required = ['tarih', 'dayibasi']
-    if not all(k in data for k in required):
-        print("Eksik parametreler")
-        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-
-    sql_check = "SELECT id FROM jti_scv_kirim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO jti_scv_kirim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
-    conn = get_db_connection()
-    if not conn: 
-        print("Veritabanı bağlantı hatası")
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
-        existing = cursor.fetchone()
-        print(f"Mevcut dayıbaşı kaydı: {existing}")
-        
-        if existing:
-            print("Bu dayıbaşı ve tarihe ait kayıt zaten var")
-            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
-        conn.commit()
-        print("Dayıbaşı kaydı başarıyla eklendi")
-        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        print(f"JTI SCV KIRIM DAYIBASI - Hata: {e}")
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-
-
 #--scv jtı dizim api endpointleri-------------------------------------------------
 @app.route('/api/jti_scv_dizim/summary', methods=['GET'])
 def get_jti_scv_dizim_summary():
@@ -3370,27 +3209,6 @@ def update_izmir_kirim_agirlik(agirlik_id):
     finally:
         conn.close()
 
-@app.route('/api/jti_scv_kirim/agirlik/<int:agirlik_id>', methods=['PUT'])
-def update_jti_scv_kirim_agirlik(agirlik_id):
-    data = request.get_json()
-    agirlik = data.get('agirlik')
-    yazici_adi = data.get('yazici_adi')
-    if agirlik is None:
-        return jsonify({'message': 'agirlik zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE jti_scv_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
-        conn.commit()
-        if cursor.rowcount == 0:
-            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
-        return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        conn.close()
 
 @app.route('/api/pmi_scv_kirim/agirlik/<int:agirlik_id>', methods=['PUT'])
 def update_pmi_scv_kirim_agirlik(agirlik_id):
@@ -3770,8 +3588,199 @@ def update_pmi_topping_dizim_yaprak(yaprak_id):
     finally:
         conn.close()
 
+# --- JTI SCV KIRIM yeni sistem için ---
+@app.route('/api/traktor_gelis_jti_kirim', methods=['POST'])
+def add_traktor_gelis_jti_kirim():
+    data = request.get_json()
+    required_fields = ['tarih', 'plaka', 'gelis_no']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        sql = """
+        INSERT INTO traktor_gelis_jti_kirim (tarih, plaka, gelis_no)
+        VALUES (?, ?, ?)
+        """
+        params = (
+            data['tarih'], data['plaka'], data['gelis_no']
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Türücü gelis kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim', methods=['GET'])
+def get_traktor_gelis_jti_kirim():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY id DESC")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim/dayibasi', methods=['POST'])
+def add_traktor_gelis_jti_kirim_dayibasi():
+    data = request.get_json()
+    required_fields = ['traktor_gelis_jti_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        sql = """
+        INSERT INTO traktor_gelis_jti_kirim_dayibasi (traktor_gelis_jti_kirim_id, dayibasi_adi, bohca_sayisi)
+        VALUES (?, ?, ?)
+        """
+        params = (
+            data['traktor_gelis_jti_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Türücü gelis dayıbaşı kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim_dayibasi', methods=['GET'])
+def get_traktor_gelis_jti_kirim_dayibasi():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi ORDER BY id DESC")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim_agirlik', methods=['POST'])
+def add_traktor_gelis_jti_kirim_agirlik():
+    data = request.get_json()
+    required_fields = ['traktor_gelis_jti_kirim_id', 'agirlik', 'created_at']
+    if not all(field in data for field in required_fields):
+        return jsonify({'message': 'Eksik alanlar var.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        sql = """
+        INSERT INTO traktor_gelis_jti_kirim_agirlik (traktor_gelis_jti_kirim_id, agirlik, created_at)
+        VALUES (?, ?, ?)
+        """
+        params = (
+            data['traktor_gelis_jti_kirim_id'], data['agirlik'], data['created_at']
+        )
+        cursor.execute(sql, params)
+        conn.commit()
+        return jsonify({'message': 'Türücü gelis ağırlık kaydı başarıyla eklendi.'}), 201
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim_agirlik', methods=['GET'])
+def get_traktor_gelis_jti_kirim_agirlik():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_agirlik ORDER BY id DESC")
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# --- JTI SCV KIRIM yeni summary endpoint ---
+@app.route('/api/traktor_gelis_jti_kirim/summary', methods=['GET'])
+def get_traktor_gelis_jti_kirim_summary():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        # Kartları getir
+        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+        kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        for kart in kartlar:
+            # Dayıbaşıları getir
+            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi WHERE traktor_gelis_jti_kirim_id = ?", (kart['id'],))
+            dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            kart['dayibasilari'] = dayibasilari
+            # Toplam bohça
+            kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
+            # Ağırlıklar
+            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_jti_kirim_agirlik WHERE traktor_gelis_jti_kirim_id = ? ORDER BY id", (kart['id'],))
+            agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            kart['agirliklar'] = agirliklar
+            # Ortalama ağırlık
+            if agirliklar:
+                kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in agirliklar])
+            else:
+                kart['ortalama_agirlik'] = 0
+                kart['toplam_kg'] = 0
+        return jsonify(kartlar)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/traktor_gelis_jti_kirim_agirlik/<int:agirlik_id>', methods=['PUT'])
+def update_traktor_gelis_jti_kirim_agirlik(agirlik_id):
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    if agirlik is None:
+        return jsonify({'message': 'agirlik zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE traktor_gelis_jti_kirim_agirlik SET agirlik = ? WHERE id = ?", (agirlik, agirlik_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
 if __name__ == '__main__':
-    print("🔄 Veritabanı bağlantısı kontrol ediliyor...")
+    print(" Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
         ensure_kutulama_alan_column()
         ensure_izmir_kutulama_sera_bosaltildi_column()
