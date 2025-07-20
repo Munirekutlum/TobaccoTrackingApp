@@ -1624,7 +1624,18 @@ def get_jti_scv_dizim_agirlik_details():
         cursor = conn.cursor()
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+            cursor.execute("SELECT id, yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            yaprak = cursor.fetchone()
+            if yaprak:
+                row_dict['yaprakSayisi'] = yaprak[1]
+                row_dict['yaprakId'] = yaprak[0]
+            else:
+                row_dict['yaprakSayisi'] = None
+                row_dict['yaprakId'] = None
+            results.append(row_dict)
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -1993,14 +2004,25 @@ def get_pmi_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik, yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+            cursor.execute("SELECT id, yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            yaprak = cursor.fetchone()
+            if yaprak:
+                row_dict['yaprakSayisi'] = yaprak[1]
+                row_dict['yaprakId'] = yaprak[0]
+            else:
+                row_dict['yaprakSayisi'] = None
+                row_dict['yaprakId'] = None
+            results.append(row_dict)
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -2355,7 +2377,18 @@ def get_pmi_topping_dizim_agirlik_details():
         cursor = conn.cursor()
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            row_dict = dict(zip(columns, row))
+            cursor.execute("SELECT id, yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            yaprak = cursor.fetchone()
+            if yaprak:
+                row_dict['yaprakSayisi'] = yaprak[1]
+                row_dict['yaprakId'] = yaprak[0]
+            else:
+                row_dict['yaprakSayisi'] = None
+                row_dict['yaprakId'] = None
+            results.append(row_dict)
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
