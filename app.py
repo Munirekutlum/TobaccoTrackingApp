@@ -1207,7 +1207,7 @@ def get_izmir_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM izmir_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik,yazici_adi,  created_at FROM izmir_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1617,7 +1617,7 @@ def get_jti_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik, yazici_adi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1993,7 +1993,7 @@ def get_pmi_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -2348,7 +2348,7 @@ def get_pmi_topping_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -2373,10 +2373,10 @@ def add_or_update_pmi_topping_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing.id))
+            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
