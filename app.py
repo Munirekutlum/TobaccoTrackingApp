@@ -1573,17 +1573,16 @@ def add_jti_scv_dizim_agirlik():
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
-    if not agirlik or not dayibasi_id or not yaprakSayisi:
-        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
-    
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
     # Veri tipi dönüşümleri
     try:
         dayibasi_id = int(dayibasi_id)
         agirlik = float(agirlik)
-        yaprakSayisi = int(yaprakSayisi)
+        if yaprakSayisi is not None:
+            yaprakSayisi = int(yaprakSayisi)
     except (ValueError, TypeError):
         return jsonify({'message': 'dayibasi_id integer, agirlik float, yaprakSayisi integer olmalıdır.'}), 400
-    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1957,8 +1956,8 @@ def add_pmi_scv_dizim_agirlik():
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
-    if not agirlik or not dayibasi_id or not yaprakSayisi:
-        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -2311,8 +2310,8 @@ def add_pmi_topping_dizim_agirlik():
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     dayibasi_id = data.get('dayibasi_id')
-    if not agirlik or not dayibasi_id or not yaprakSayisi:
-        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
+    if not agirlik or not dayibasi_id:
+        return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -3354,7 +3353,10 @@ def update_jti_scv_dizim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        if yaprakSayisi is not None:
+            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+        else:
+            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3398,7 +3400,10 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        if yaprakSayisi is not None:
+            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+        else:
+            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3513,6 +3518,32 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/pmi_scv_dizim/agirlik/<int:agirlik_id>', methods=['PUT'])
+def update_pmi_scv_dizim_agirlik(agirlik_id):
+    data = request.get_json()
+    agirlik = data.get('agirlik')
+    yaprakSayisi = data.get('yaprakSayisi')
+    yazici_adi = data.get('yazici_adi')
+    if agirlik is None:
+        return jsonify({'message': 'agirlik zorunludur.'}), 400
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        if yaprakSayisi is not None:
+            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+        else:
+            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
