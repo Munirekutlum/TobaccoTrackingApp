@@ -2348,7 +2348,7 @@ def get_pmi_topping_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yaprakSayisi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
