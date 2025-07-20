@@ -1557,6 +1557,19 @@ def get_jti_scv_dizim_summary():
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
             else:
                 r['toplamTahminiKg'] = 0
+            # İlk 10 agirlik ve yaprakSayisi
+            cursor.execute("SELECT id, agirlik FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            agirliklar = cursor.fetchall()
+            agirlikDetails = []
+            for agirlik_row in agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                agirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -1803,6 +1816,19 @@ def get_pmi_scv_kirim_summary():
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
             else:
                 r['toplamTahminiKg'] = 0
+            # İlk 10 agirlik ve yaprakSayisi
+            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            agirliklar = cursor.fetchall()
+            agirlikDetails = []
+            for agirlik_row in agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                agirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -1949,6 +1975,19 @@ def get_pmi_scv_dizim_summary():
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
             else:
                 r['toplamTahminiKg'] = 0
+            # İlk 10 agirlik ve yaprakSayisi
+            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            agirliklar = cursor.fetchall()
+            agirlikDetails = []
+            for agirlik_row in agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                agirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -2180,6 +2219,19 @@ def get_pmi_topping_kirim_summary():
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['bohcaSayisi']
             else:
                 r['toplamTahminiKg'] = 0
+            # İlk 10 agirlik ve yaprakSayisi
+            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            agirliklar = cursor.fetchall()
+            agirlikDetails = []
+            for agirlik_row in agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                agirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -2315,6 +2367,19 @@ def get_pmi_topping_dizim_summary():
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
             else:
                 r['toplamTahminiKg'] = 0
+            # İlk 10 agirlik ve yaprakSayisi
+            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            agirliklar = cursor.fetchall()
+            agirlikDetails = []
+            for agirlik_row in agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                agirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
