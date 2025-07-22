@@ -845,43 +845,7 @@ def ensure_scv_sera_new_columns():
 
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
-@app.route('/api/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    email = (data.get('email') or '').strip()
-    password = data.get('password')
-    name = (data.get('name') or '').strip()
-    surname = (data.get('surname') or '').strip()
 
-    print(f"[REGISTER] email: {email}, password: {password}")
-
-    if not email or not password or not name or not surname:
-        return jsonify({'message': 'Tüm alanlar zorunlu.'}), 400
-
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı hatası.'}), 500
-
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO users (email, password, name, surname) VALUES (?, ?, ?, ?)", (email, password, name, surname))
-        user_id = cursor.lastrowid
-        conn.commit()
-        # Yeni kullanıcıyı çek
-        cursor.execute("SELECT id, email, name, surname FROM users WHERE id = ?", (user_id,))
-        user = cursor.fetchone()
-        user_data = {'id': user['id'], 'email': user['email'], 'name': user['name'], 'surname': user['surname']}
-        return jsonify({'message': 'Kayıt başarılı.', 'user': user_data}), 201
-    except sqlite3.IntegrityError:
-        return jsonify({'message': 'Bu email zaten kayıtlı.'}), 409
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        cursor.close()
-        conn.close()
-
-@app.route('/api/login', methods=['POST'])
-def login():
     data = request.get_json()
     email = data.get('email')
     password = data.get('password')
@@ -1496,71 +1460,6 @@ def add_or_update_jti_scv_dizim_gunluk():
             cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-
-#-- scv jtı kutulama api endpointleri-----
-
-@app.route('/api/jti_scv_kutulama/dayibasi', methods=['POST'])
-def add_jti_scv_kutulama_dayibasi():
-    data = request.get_json()
-    required = ['tarih', 'dayibasi']
-    if not all(k in data for k in required):
-        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM jti_scv_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO jti_scv_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
-        existing = cursor.fetchone()
-        if existing:
-            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
-        conn.commit()
-        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kutulama/kuru_kg', methods=['POST'])
-def add_jti_scv_kutulama_kuru_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/jti_scv_kutulama/sera_yas_kg', methods=['POST'])
-def add_jti_scv_kutulama_sera_yas_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
@@ -2311,83 +2210,83 @@ def get_scv_kutulama_summary():
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         kutulama_kayitlari = cursor.fetchall()
         
-        alan_istatistik = {}
-        genel_kayit = 0
-        genel_kutu_sayisi = 0
-        genel_toplam_kg = 0
+        # İstatistikleri tutacak sözlükler
+        pmi_scv = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+        jti_scv = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+        pmi_topping = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+        genel = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
         
         for row in kutulama_kayitlari:
-            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
-            alan = alan.strip().upper()
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            # Alan adını al ve normalize et
+            alan = row['alan'] if isinstance(row, dict) else row[0]
+            alan = str(alan).strip().lower()
             
+            # Kutuları parse et
+            kutular_json = row['kutular'] if isinstance(row, dict) else row[1]
             try:
-                kutular_array = json.loads(kutular_json) if kutular_json else []
-                # Düzeltilmiş kutu sayısı hesaplama
-                kutu_sayisi = 0
-                kutu_toplam_kg = 0
-                
-                for kutu in kutular_array:
-                    if isinstance(kutu, dict):
-                        # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
-                        kutu_sayisi += kutu.get('adet', 0)
-                        kutu_toplam_kg += kutu.get('toplam_kg', 0)
-                    else:
-                        # Eski format: sadece sayı varsa
-                        if kutu and kutu > 0:
-                            kutu_sayisi += 1
-                            kutu_toplam_kg += kutu
-                            
-            except Exception as e:
-                print(f"Kutu parsing hatası: {e}")
-                kutu_sayisi = 0
-                kutu_toplam_kg = toplam_kg  # Fallback olarak toplam_kuru_kg kullan
+                kutular = json.loads(kutular_json) if kutular_json else []
+            except:
+                kutular = []
             
-            if alan not in alan_istatistik:
-                alan_istatistik[alan] = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+            # Kutu istatistiklerini hesapla
+            kayit_kutu_sayisi = 0
+            kayit_toplam_kg = 0
             
-            alan_istatistik[alan]['toplam_kayit'] += 1
-            alan_istatistik[alan]['toplam_kutu_kg'] += kutu_toplam_kg
-            alan_istatistik[alan]['toplam_kutu_sayisi'] += kutu_sayisi
+            for kutu in kutular:
+                if isinstance(kutu, dict):
+                    # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                    kayit_kutu_sayisi += kutu.get('adet', 0)
+                    kayit_toplam_kg += kutu.get('toplam_kg', 0)
+                else:
+                    # Eski format: sadece sayı
+                    if isinstance(kutu, (int, float)) and kutu > 0:
+                        kayit_kutu_sayisi += 1
+                        kayit_toplam_kg += kutu
             
-            genel_kayit += 1
-            genel_kutu_sayisi += kutu_sayisi
-            genel_toplam_kg += kutu_toplam_kg
-        
-        print(f"Alan istatistikleri: {alan_istatistik}")
-        
-        # Alan adı eşleme fonksiyonu (düzeltilmiş)
-        def get_alan_stats(target_keys):
-            stats = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
-            for key in alan_istatistik:
-                if any(target in key for target in target_keys):
-                    stats['toplam_kayit'] += alan_istatistik[key]['toplam_kayit']
-                    stats['toplam_kutu_kg'] += alan_istatistik[key]['toplam_kutu_kg']
-                    stats['toplam_kutu_sayisi'] += alan_istatistik[key]['toplam_kutu_sayisi']
-            return stats
+            # Alanına göre istatistikleri güncelle
+            if 'pmi' in alan and 'scv' in alan:
+                pmi_scv['toplam_kayit'] += 1
+                pmi_scv['toplam_kutu_sayisi'] += kayit_kutu_sayisi
+                pmi_scv['toplam_kutu_kg'] += kayit_toplam_kg
+            elif 'jti' in alan and 'scv' in alan:
+                jti_scv['toplam_kayit'] += 1
+                jti_scv['toplam_kutu_sayisi'] += kayit_kutu_sayisi
+                jti_scv['toplam_kutu_kg'] += kayit_toplam_kg
+            elif 'pmi' in alan and 'topping' in alan:
+                pmi_topping['toplam_kayit'] += 1
+                pmi_topping['toplam_kutu_sayisi'] += kayit_kutu_sayisi
+                pmi_topping['toplam_kutu_kg'] += kayit_toplam_kg
+            
+            # Genel istatistikleri güncelle
+            genel['toplam_kayit'] += 1
+            genel['toplam_kutu_sayisi'] += kayit_kutu_sayisi
+            genel['toplam_kutu_kg'] += kayit_toplam_kg
         
         return jsonify({
-            'pmi_scv': get_alan_stats(['PMI SCV', 'PMI-SCV']),
-            'jti_scv': get_alan_stats(['JTI SCV', 'JTI-SCV']),
-            'pmi_topping': get_alan_stats(['PMI TOPPING', 'PMI-TOPPING']),
-            'genel': {
-                'toplam_kayit': genel_kayit,
-                'toplam_kutu_kg': genel_toplam_kg,
-                'toplam_kutu_sayisi': genel_kutu_sayisi
-            }
+            'pmi_scv': pmi_scv,
+            'jti_scv': jti_scv,
+            'pmi_topping': pmi_topping,
+            'genel': genel
         })
+        
     except Exception as e:
         print(f"Kutulama özeti hatası: {e}")
-        return jsonify({'message': f'Hata: {e}'}), 500
+        return jsonify({
+            'pmi_scv': {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0},
+            'jti_scv': {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0},
+            'pmi_topping': {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0},
+            'genel': {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+        }), 500
     finally:
-        if conn: 
+        if conn:
             conn.close()
+
 # --- Sera Boşaltma Endpoint ---
 @app.route('/api/scv_sera/bosalt', methods=['POST'])
 def bosalt_scv_sera():
