@@ -846,32 +846,6 @@ def ensure_scv_sera_new_columns():
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
 
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-
-    print(f"[LOGIN] email: {email}, password: {password}")
-
-    if not email or not password:
-        return jsonify({'message': 'Email ve şifre gerekli.'}), 400
-
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, email, name, surname FROM users WHERE email = ? AND password = ?", (email, password))
-    user = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-
-    if user:
-        user_data = {'id': user['id'], 'email': user['email'], 'name': user['name'], 'surname': user['surname']}
-        return jsonify({'message': 'Giriş başarılı.', 'user': user_data})
-    else:
-        return jsonify({'message': 'Email veya şifre hatalı.'}), 401
-
 # --- FCV Genel API Endpointleri ---
 #-----------------------------------------------------------------------------------------------------
 @app.route('/api/fcv_genel', methods=['POST'])
