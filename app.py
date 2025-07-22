@@ -1960,37 +1960,6 @@ def add_or_update_pmi_topping_dizim_gunluk():
         if conn: conn.close()
 
 #----- scv pmi topping kutulama api endpointleri---------
-
-@app.route('/api/pmi_topping_kutulama/summary', methods=['GET'])
-def get_pmi_topping_kutulama_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi
-            FROM pmi_topping_kutulama_dayibasi_table d
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
-            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
-            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
 @app.route('/api/pmi_topping_kutulama/dayibasi', methods=['POST'])
 def add_pmi_topping_kutulama_dayibasi():
     data = request.get_json()
@@ -4018,37 +3987,6 @@ def get_jti_scv_kutulama_summary():
         if conn: conn.close()
 
 # PMI SCV Kutulama Summary
-@app.route('/api/pmi_scv_kutulama/summary', methods=['GET'])
-def get_pmi_scv_kutulama_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi
-            FROM pmi_scv_kutulama_dayibasi_table d
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
-            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
-            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
-            r['departman'] = 'PMI SCV'
-            r['kutu_sayisi'] = len(r['kuruKgList'])
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
 
 # PMI TOPPING Kutulama Summary
 @app.route('/api/pmi_topping_kutulama/summary', methods=['GET'])
