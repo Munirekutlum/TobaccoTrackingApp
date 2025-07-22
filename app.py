@@ -1503,37 +1503,6 @@ def add_or_update_jti_scv_dizim_gunluk():
 
 
 #-- scv jtı kutulama api endpointleri-----
-#-- scv jtı kutulama api endpointleri-----
-
-@app.route('/api/jti_scv_kutulama/summary', methods=['GET'])
-def get_jti_scv_kutulama_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi
-            FROM jti_scv_kutulama_dayibasi_table d
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            cursor.execute("SELECT id, value FROM jti_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM jti_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
-            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
-            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
 
 @app.route('/api/jti_scv_kutulama/dayibasi', methods=['POST'])
 def add_jti_scv_kutulama_dayibasi():
