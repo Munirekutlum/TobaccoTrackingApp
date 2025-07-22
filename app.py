@@ -2363,6 +2363,93 @@ def get_scv_kutulama_by_date(tarih):
         if conn:
             conn.close()
 
+# Filtre ve form değişkenleri birbirinden bağımsız olmalı
+filterSeraYeri: str = ''
+selectedSeraYeri: str = ''
+
+# --- SCV Kutulama Summary API Endpoint (Düzeltilmiş) ---
+@app.route('/api/scv_kutulama/summary', methods=['GET'])
+def get_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        kutulama_kayitlari = cursor.fetchall()
+        
+        alan_istatistik = {}
+        genel_kayit = 0
+        genel_kutu_sayisi = 0
+        genel_toplam_kg = 0
+        
+        for row in kutulama_kayitlari:
+            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
+            alan = alan.strip().upper()
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            
+            try:
+                kutular_array = json.loads(kutular_json) if kutular_json else []
+                # Düzeltilmiş kutu sayısı hesaplama
+                kutu_sayisi = 0
+                kutu_toplam_kg = 0
+                
+                for kutu in kutular_array:
+                    if isinstance(kutu, dict):
+                        # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                        kutu_sayisi += kutu.get('adet', 0)
+                        kutu_toplam_kg += kutu.get('toplam_kg', 0)
+                    else:
+                        # Eski format: sadece sayı varsa
+                        if kutu and kutu > 0:
+                            kutu_sayisi += 1
+                            kutu_toplam_kg += kutu
+                            
+            except Exception as e:
+                print(f"Kutu parsing hatası: {e}")
+                kutu_sayisi = 0
+                kutu_toplam_kg = toplam_kg  # Fallback olarak toplam_kuru_kg kullan
+            
+            if alan not in alan_istatistik:
+                alan_istatistik[alan] = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+            
+            alan_istatistik[alan]['toplam_kayit'] += 1
+            alan_istatistik[alan]['toplam_kutu_kg'] += kutu_toplam_kg
+            alan_istatistik[alan]['toplam_kutu_sayisi'] += kutu_sayisi
+            
+            genel_kayit += 1
+            genel_kutu_sayisi += kutu_sayisi
+            genel_toplam_kg += kutu_toplam_kg
+        
+        print(f"Alan istatistikleri: {alan_istatistik}")
+        
+        # Alan adı eşleme fonksiyonu (düzeltilmiş)
+        def get_alan_stats(target_keys):
+            stats = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
+            for key in alan_istatistik:
+                if any(target in key for target in target_keys):
+                    stats['toplam_kayit'] += alan_istatistik[key]['toplam_kayit']
+                    stats['toplam_kutu_kg'] += alan_istatistik[key]['toplam_kutu_kg']
+                    stats['toplam_kutu_sayisi'] += alan_istatistik[key]['toplam_kutu_sayisi']
+            return stats
+        
+        return jsonify({
+            'pmi_scv': get_alan_stats(['PMI SCV', 'PMI-SCV']),
+            'jti_scv': get_alan_stats(['JTI SCV', 'JTI-SCV']),
+            'pmi_topping': get_alan_stats(['PMI TOPPING', 'PMI-TOPPING']),
+            'genel': {
+                'toplam_kayit': genel_kayit,
+                'toplam_kutu_kg': genel_toplam_kg,
+                'toplam_kutu_sayisi': genel_kutu_sayisi
+            }
+        })
+    except Exception as e:
+        print(f"Kutulama özeti hatası: {e}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: 
+            conn.close()
 # --- Sera Boşaltma Endpoint ---
 @app.route('/api/scv_sera/bosalt', methods=['POST'])
 def bosalt_scv_sera():
@@ -2598,71 +2685,7 @@ def get_izmir_kutulama():
     conn.close()
     return jsonify(results)
 
-# Filtre ve form değişkenleri birbirinden bağımsız olmalı
-filterSeraYeri: str = ''
-selectedSeraYeri: str = ''
 
-# --- SCV Kutulama Summary API Endpoint ---
-@app.route('/api/scv_kutulama/summary', methods=['GET'])
-def get_scv_kutulama_summary():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
-        kutulama_kayitlari = cursor.fetchall()
-        
-        alan_istatistik = {}
-        genel_kayit = 0
-        genel_kutu_sayisi = 0
-        genel_toplam_kg = 0
-        
-        for row in kutulama_kayitlari:
-            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
-            alan = alan.strip().upper()
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
-            try:
-                kutular_array = json.loads(kutular_json) if kutular_json else []
-                # Kutu sayısı: 0'dan büyük olan kutuların sayısı
-                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
-            except Exception:
-                kutu_sayisi = 0
-            if alan not in alan_istatistik:
-                alan_istatistik[alan] = {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
-            alan_istatistik[alan]['toplam_kayit'] += 1
-            alan_istatistik[alan]['toplam_kutu_kg'] += toplam_kg
-            alan_istatistik[alan]['toplam_kutu_sayisi'] += kutu_sayisi
-            genel_kayit += 1
-            genel_kutu_sayisi += kutu_sayisi
-            genel_toplam_kg += toplam_kg
-        
-        # Debug için alan istatistiklerini yazdır
-        print(f"Alan istatistikleri: {alan_istatistik}")
-        
-        # Standart başlıklar
-        def get_alan(anahtar):
-            for k in alan_istatistik:
-                if anahtar in k or anahtar.replace(' ', '-') in k or anahtar.replace('-', ' ') in k:
-                    return alan_istatistik[k]
-            return {'toplam_kayit': 0, 'toplam_kutu_kg': 0, 'toplam_kutu_sayisi': 0}
-        
-        return jsonify({
-            'pmi_scv': get_alan('PMI SCV'),
-            'jti_scv': get_alan('JTI SCV'),
-            'pmi_topping': get_alan('PMI TOPPING'),
-            'genel': {
-                'toplam_kayit': genel_kayit,
-                'toplam_kutu_kg': genel_toplam_kg,
-                'toplam_kutu_sayisi': genel_kutu_sayisi
-            }
-        })
-    except Exception as e:
-        print(f"Kutulama özeti hatası: {e}")
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
 
 @app.route("/")
 def home():
@@ -3991,6 +4014,105 @@ def update_scv_sera_bitis_tarihi(sera_id):
     finally:
         if conn:
             conn.close()
+
+# JTI SCV Kutulama Summary
+@app.route('/api/jti_scv_kutulama/summary', methods=['GET'])
+def get_jti_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM jti_scv_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+            r['departman'] = 'JTI SCV'
+            r['kutu_sayisi'] = len(r['kuruKgList'])
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+# PMI SCV Kutulama Summary
+@app.route('/api/pmi_scv_kutulama/summary', methods=['GET'])
+def get_pmi_scv_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM pmi_scv_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+            r['departman'] = 'PMI SCV'
+            r['kutu_sayisi'] = len(r['kuruKgList'])
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
+
+# PMI TOPPING Kutulama Summary
+@app.route('/api/pmi_topping_kutulama/summary', methods=['GET'])
+def get_pmi_topping_kutulama_summary():
+    conn = get_db_connection()
+    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                d.id as dayibasi_id,
+                d.tarih,
+                d.dayibasi
+            FROM pmi_topping_kutulama_dayibasi_table d
+            ORDER BY d.tarih DESC, d.dayibasi
+        ''')
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        for r in results:
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
+            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
+            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
+            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
+            r['departman'] = 'PMI Topping'
+            r['kutu_sayisi'] = len(r['kuruKgList'])
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn: conn.close()
 
 if __name__ == '__main__':
     print(" Veritabanı bağlantısı kontrol ediliyor...")
