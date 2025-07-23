@@ -713,14 +713,15 @@ def initialize_db():
             );''',
             'traktor_gelis_izmir_kirim_sergi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_izmir_kirim_sergi (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
+                traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
                 sergi_no TEXT NOT NULL,
                 toplam_sepet INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES traktor_gelis_izmir_kirim_dayibasi(id) ON DELETE CASCADE,
-                UNIQUE(dayibasi_id, sergi_no)
+                FOREIGN KEY(traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE,
+                UNIQUE(traktor_gelis_izmir_kirim_id, sergi_no)
             );'''
+
         }
         
         created_tables = []
@@ -3816,12 +3817,11 @@ def get_traktor_gelis_izmir_kirim_summary():
         if conn:
             conn.close()
 
-
-# Sergi ekleme endpoint'i
+# Sergi ekleme endpoint'i (Karta bağlı)
 @app.route('/api/traktor_gelis_izmir_kirim_sergi', methods=['POST'])
 def add_traktor_gelis_izmir_kirim_sergi():
     data = request.get_json()
-    required_fields = ['dayibasi_id', 'sergi_no', 'sepet_sayisi']
+    required_fields = ['traktor_gelis_izmir_kirim_id', 'sergi_no', 'sepet_sayisi']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
     
@@ -3836,11 +3836,11 @@ def add_traktor_gelis_izmir_kirim_sergi():
     try:
         cursor = conn.cursor()
         
-        # Aynı dayıbaşı ve sergi no kontrolü
+        # Aynı kart ve sergi no kontrolü
         cursor.execute("""
             SELECT toplam_sepet FROM traktor_gelis_izmir_kirim_sergi 
-            WHERE dayibasi_id = ? AND sergi_no = ?
-        """, (data['dayibasi_id'], data['sergi_no']))
+            WHERE traktor_gelis_izmir_kirim_id = ? AND sergi_no = ?
+        """, (data['traktor_gelis_izmir_kirim_id'], data['sergi_no']))
         
         existing_sergi = cursor.fetchone()
         
@@ -3861,17 +3861,17 @@ def add_traktor_gelis_izmir_kirim_sergi():
             cursor.execute("""
                 UPDATE traktor_gelis_izmir_kirim_sergi 
                 SET toplam_sepet = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE dayibasi_id = ? AND sergi_no = ?
-            """, (new_total, data['dayibasi_id'], data['sergi_no']))
+                WHERE traktor_gelis_izmir_kirim_id = ? AND sergi_no = ?
+            """, (new_total, data['traktor_gelis_izmir_kirim_id'], data['sergi_no']))
             
             message = f'Sergi {data["sergi_no"]} güncellendi. Toplam sepet: {new_total}'
         else:
             # Yeni sergi oluştur
             sql = """
-            INSERT INTO traktor_gelis_izmir_kirim_sergi (dayibasi_id, sergi_no, toplam_sepet, created_at)
+            INSERT INTO traktor_gelis_izmir_kirim_sergi (traktor_gelis_izmir_kirim_id, sergi_no, toplam_sepet, created_at)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             """
-            cursor.execute(sql, (data['dayibasi_id'], data['sergi_no'], data['sepet_sayisi']))
+            cursor.execute(sql, (data['traktor_gelis_izmir_kirim_id'], data['sergi_no'], data['sepet_sayisi']))
             message = f'Sergi {data["sergi_no"]} oluşturuldu. Toplam sepet: {data["sepet_sayisi"]}'
         
         conn.commit()
@@ -3883,9 +3883,9 @@ def add_traktor_gelis_izmir_kirim_sergi():
         if conn:
             conn.close()
 
-# Dayıbaşına ait sergileri getirme
-@app.route('/api/traktor_gelis_izmir_kirim_sergi/dayibasi/<int:dayibasi_id>', methods=['GET'])
-def get_sergi_by_dayibasi(dayibasi_id):
+# Karta ait sergileri getirme
+@app.route('/api/traktor_gelis_izmir_kirim_sergi/kart/<int:kart_id>', methods=['GET'])
+def get_sergi_by_kart(kart_id):
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -3897,9 +3897,9 @@ def get_sergi_by_dayibasi(dayibasi_id):
                    (150 - toplam_sepet) as kalan_kapasite,
                    CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
             FROM traktor_gelis_izmir_kirim_sergi 
-            WHERE dayibasi_id = ? 
+            WHERE traktor_gelis_izmir_kirim_id = ? 
             ORDER BY sergi_no
-        """, (dayibasi_id,))
+        """, (kart_id,))
         
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -3945,7 +3945,7 @@ def update_sergi(sergi_id):
         if conn:
             conn.close()
 
-# Summary endpoint'ini güncelle (sergi bilgilerini dahil et)
+# Summary endpoint'ini güncelle (sergi bilgilerini karta bağlı olarak dahil et)
 @app.route('/api/traktor_gelis_izmir_kirim/summary_with_sergi', methods=['GET'])
 def get_traktor_gelis_izmir_kirim_summary_with_sergi():
     conn = get_db_connection()
@@ -3962,21 +3962,20 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = ?", (kart['id'],))
             dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             
-            # Her dayıbaşı için sergileri getir
-            for dayibasi in dayibasilari:
-                cursor.execute("""
-                    SELECT id, sergi_no, toplam_sepet, created_at, updated_at,
-                           (150 - toplam_sepet) as kalan_kapasite,
-                           CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
-                    FROM traktor_gelis_izmir_kirim_sergi 
-                    WHERE dayibasi_id = ? 
-                    ORDER BY sergi_no
-                """, (dayibasi['id'],))
-                dayibasi['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
-                dayibasi['toplam_sergi_sepet'] = sum([s['toplam_sepet'] for s in dayibasi['sergiler']])
-            
             kart['dayibasilari'] = dayibasilari
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
+            
+            # Karta ait sergileri getir
+            cursor.execute("""
+                SELECT id, sergi_no, toplam_sepet, created_at, updated_at,
+                       (150 - toplam_sepet) as kalan_kapasite,
+                       CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
+                FROM traktor_gelis_izmir_kirim_sergi 
+                WHERE traktor_gelis_izmir_kirim_id = ? 
+                ORDER BY sergi_no
+            """, (kart['id'],))
+            kart['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            kart['toplam_sergi_sepet'] = sum([s['toplam_sepet'] for s in kart['sergiler']])
             
             # Ağırlık bilgileri
             cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_izmir_kirim_agirlik WHERE traktor_gelis_izmir_kirim_id = ? ORDER BY id", (kart['id'],))
