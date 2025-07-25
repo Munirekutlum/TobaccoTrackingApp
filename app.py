@@ -711,15 +711,24 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE
             );''',
-            'traktor_gelis_izmir_kirim_sergi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_izmir_kirim_sergi (
+            'sergi_kiriz': '''CREATE TABLE IF NOT EXISTS sergi_kiriz (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
-                sergi_no TEXT NOT NULL,
+                sergi_no TEXT NOT NULL UNIQUE,
                 toplam_sepet INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+
+            'sergi_sepet_dagitim': '''CREATE TABLE IF NOT EXISTS sergi_sepet_dagitim (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sergi_id INTEGER NOT NULL,
+                traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
+                sepet_sayisi INTEGER NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE,
-                UNIQUE(traktor_gelis_izmir_kirim_id, sergi_no)
+                FOREIGN KEY (sergi_id) REFERENCES sergi_kiriz(id) ON DELETE CASCADE,
+                FOREIGN KEY (traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE,
+                UNIQUE (sergi_id, traktor_gelis_izmir_kirim_id)
             );'''
 
         }
@@ -3817,15 +3826,15 @@ def get_traktor_gelis_izmir_kirim_summary():
         if conn:
             conn.close()
 
-# Sergi ekleme endpoint'i (Karta bağlı)
-@app.route('/api/traktor_gelis_izmir_kirim_sergi', methods=['POST'])
-def add_traktor_gelis_izmir_kirim_sergi():
+
+# Sergi oluşturma veya güncelleme
+@app.route('/api/sergi_kiriz', methods=['POST'])
+def add_or_update_sergi_kiriz():
     data = request.get_json()
-    required_fields = ['traktor_gelis_izmir_kirim_id', 'sergi_no', 'sepet_sayisi']
+    required_fields = ['sergi_no', 'sepet_sayisi', 'traktor_gelis_izmir_id']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
     
-    # Sepet sayısı kontrolü
     if data['sepet_sayisi'] <= 0 or data['sepet_sayisi'] > 150:
         return jsonify({'message': 'Sepet sayısı 1-150 arasında olmalıdır.'}), 400
     
@@ -3836,43 +3845,53 @@ def add_traktor_gelis_izmir_kirim_sergi():
     try:
         cursor = conn.cursor()
         
-        # Aynı kart ve sergi no kontrolü
-        cursor.execute("""
-            SELECT toplam_sepet FROM traktor_gelis_izmir_kirim_sergi 
-            WHERE traktor_gelis_izmir_kirim_id = ? AND sergi_no = ?
-        """, (data['traktor_gelis_izmir_kirim_id'], data['sergi_no']))
+        # Mevcut sergiyi kontrol et
+        cursor.execute("SELECT id, toplam_sepet FROM sergi_kiriz WHERE sergi_no = ?", (data['sergi_no'],))
+        sergi = cursor.fetchone()
         
-        existing_sergi = cursor.fetchone()
-        
-        if existing_sergi:
-            # Var olan sergiye ekleme
-            current_sepet = existing_sergi[0]
+        if sergi:
+            # Var olan sergiye ekleme yap
+            sergi_id, current_sepet = sergi
             new_total = current_sepet + data['sepet_sayisi']
             
             if new_total > 150:
                 remaining = 150 - current_sepet
                 return jsonify({
-                    'message': f'Bu sergiye en fazla {remaining} sepet eklenebilir. Sergi kapasitesi: 150',
-                    'remaining_capacity': remaining,
-                    'current_sepet': current_sepet
+                    'message': f'Bu sergiye en fazla {remaining} sepet eklenebilir. Toplam kapasite: 150',
+                    'remaining': remaining
                 }), 400
             
-            # Güncelle
+            # Sergiyi güncelle
             cursor.execute("""
-                UPDATE traktor_gelis_izmir_kirim_sergi 
+                UPDATE sergi_kiriz 
                 SET toplam_sepet = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE traktor_gelis_izmir_kirim_id = ? AND sergi_no = ?
-            """, (new_total, data['traktor_gelis_izmir_kirim_id'], data['sergi_no']))
+                WHERE id = ?
+            """, (new_total, sergi_id))
             
-            message = f'Sergi {data["sergi_no"]} güncellendi. Toplam sepet: {new_total}'
+            # Dağıtım kaydı ekle
+            cursor.execute("""
+                INSERT INTO sergi_sepet_dagitim 
+                (sergi_id, traktor_gelis_izmir_kirim_id, sepet_sayisi)
+                VALUES (?, ?, ?)
+            """, (sergi_id, data['traktor_gelis_izmir_id'], data['sepet_sayisi']))
+            
+            message = f'Sergi {data["sergi_no"]} güncellendi. Yeni toplam: {new_total}/150'
         else:
             # Yeni sergi oluştur
-            sql = """
-            INSERT INTO traktor_gelis_izmir_kirim_sergi (traktor_gelis_izmir_kirim_id, sergi_no, toplam_sepet, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """
-            cursor.execute(sql, (data['traktor_gelis_izmir_kirim_id'], data['sergi_no'], data['sepet_sayisi']))
-            message = f'Sergi {data["sergi_no"]} oluşturuldu. Toplam sepet: {data["sepet_sayisi"]}'
+            cursor.execute("""
+                INSERT INTO sergi_kiriz (sergi_no, toplam_sepet)
+                VALUES (?, ?)
+            """, (data['sergi_no'], data['sepet_sayisi']))
+            sergi_id = cursor.lastrowid
+            
+            # Dağıtım kaydı ekle
+            cursor.execute("""
+                INSERT INTO sergi_sepet_dagitim 
+                (sergi_id, traktor_gelis_izmir_kirim_id, sepet_sayisi)
+                VALUES (?, ?, ?)
+            """, (sergi_id, data['traktor_gelis_izmir_id'], data['sepet_sayisi']))
+            
+            message = f'Sergi {data["sergi_no"]} oluşturuldu. Toplam sepet: {data["sepet_sayisi"]}/150'
         
         conn.commit()
         return jsonify({'message': message}), 201
@@ -3883,9 +3902,9 @@ def add_traktor_gelis_izmir_kirim_sergi():
         if conn:
             conn.close()
 
-# Karta ait sergileri getirme
-@app.route('/api/traktor_gelis_izmir_kirim_sergi/kart/<int:kart_id>', methods=['GET'])
-def get_sergi_by_kart(kart_id):
+# Tamamlanmamış sergileri listeleme
+@app.route('/api/sergi_kiriz/incomplete', methods=['GET'])
+def get_incomplete_sergi_kiriz():
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -3893,103 +3912,16 @@ def get_sergi_by_kart(kart_id):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, sergi_no, toplam_sepet, created_at, updated_at,
-                   (150 - toplam_sepet) as kalan_kapasite,
-                   CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
-            FROM traktor_gelis_izmir_kirim_sergi 
-            WHERE traktor_gelis_izmir_kirim_id = ? 
+            SELECT id, sergi_no, toplam_sepet, 
+                   (150 - toplam_sepet) as kalan_kapasite
+            FROM sergi_kiriz
+            WHERE toplam_sepet < 150
             ORDER BY sergi_no
-        """, (kart_id,))
+        """)
         
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
-        
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-# Sergi güncelleme
-@app.route('/api/traktor_gelis_izmir_kirim_sergi/<int:sergi_id>', methods=['PUT'])
-def update_sergi(sergi_id):
-    data = request.get_json()
-    toplam_sepet = data.get('toplam_sepet')
-    
-    if toplam_sepet is None or toplam_sepet <= 0 or toplam_sepet > 150:
-        return jsonify({'message': 'Sepet sayısı 1-150 arasında olmalıdır.'}), 400
-    
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE traktor_gelis_izmir_kirim_sergi 
-            SET toplam_sepet = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (toplam_sepet, sergi_id))
-        
-        conn.commit()
-        
-        if cursor.rowcount == 0:
-            return jsonify({'message': 'Sergi kaydı bulunamadı.'}), 404
-            
-        return jsonify({'message': 'Sergi başarıyla güncellendi.'}), 200
-        
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-# Summary endpoint'ini güncelle (sergi bilgilerini karta bağlı olarak dahil et)
-@app.route('/api/traktor_gelis_izmir_kirim/summary_with_sergi', methods=['GET'])
-def get_traktor_gelis_izmir_kirim_summary_with_sergi():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
-        kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
-        
-        for kart in kartlar:
-            # Dayıbaşıları getir
-            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = ?", (kart['id'],))
-            dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
-            
-            kart['dayibasilari'] = dayibasilari
-            kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
-            
-            # Karta ait sergileri getir
-            cursor.execute("""
-                SELECT id, sergi_no, toplam_sepet, created_at, updated_at,
-                       (150 - toplam_sepet) as kalan_kapasite,
-                       CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
-                FROM traktor_gelis_izmir_kirim_sergi 
-                WHERE traktor_gelis_izmir_kirim_id = ? 
-                ORDER BY sergi_no
-            """, (kart['id'],))
-            kart['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
-            kart['toplam_sergi_sepet'] = sum([s['toplam_sepet'] for s in kart['sergiler']])
-            
-            # Ağırlık bilgileri
-            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_izmir_kirim_agirlik WHERE traktor_gelis_izmir_kirim_id = ? ORDER BY id", (kart['id'],))
-            agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
-            kart['agirliklar'] = agirliklar
-            
-            if agirliklar:
-                kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
-            else:
-                kart['ortalama_agirlik'] = 0
-                
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
-        
-        return jsonify(kartlar)
         
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
