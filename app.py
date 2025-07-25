@@ -3928,6 +3928,76 @@ def get_incomplete_sergi_kiriz():
     finally:
         if conn:
             conn.close()
+
+@app.route('/api/traktor_gelis_izmir_kirim/summary_with_sergi', methods=['GET'])
+def get_traktor_gelis_izmir_kirim_summary_with_sergi():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Tüm traktör kartlarını getir
+        cursor.execute("""
+            SELECT id, tarih, plaka, gelis_no 
+            FROM traktor_gelis_izmir_kirim 
+            ORDER BY tarih DESC, plaka, gelis_no DESC
+        """)
+        kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        # 2. Her kart için detayları doldur
+        for kart in kartlar:
+            # Dayıbaşıları getir
+            cursor.execute("""
+                SELECT id, dayibasi_adi, bohca_sayisi 
+                FROM traktor_gelis_izmir_kirim_dayibasi 
+                WHERE traktor_gelis_izmir_kirim_id = ?
+            """, (kart['id'],))
+            kart['dayibasilari'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in kart['dayibasilari']]) if kart['dayibasilari'] else 0
+            
+            # Ağırlıkları getir
+            cursor.execute("""
+                SELECT id, agirlik, created_at 
+                FROM traktor_gelis_izmir_kirim_agirlik 
+                WHERE traktor_gelis_izmir_kirim_id = ? 
+                ORDER BY id
+            """, (kart['id'],))
+            kart['agirliklar'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # Ortalama ağırlık hesapla
+            if kart['agirliklar']:
+                kart['ortalama_agirlik'] = sum([a['agirlik'] for a in kart['agirliklar']]) / len(kart['agirliklar'])
+            else:
+                kart['ortalama_agirlik'] = 0
+            
+            # Toplam kg hesapla
+            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+            
+            # Sergileri getir (YENİ EKLENEN KISIM)
+            cursor.execute("""
+                SELECT s.id, s.sergi_no, s.toplam_sepet, 
+                       (150 - s.toplam_sepet) as kalan_kapasite,
+                       CASE WHEN s.toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
+                FROM sergi_kiriz s
+                JOIN sergi_sepet_dagitim d ON s.id = d.sergi_id
+                WHERE d.traktor_gelis_izmir_kirim_id = ?
+                GROUP BY s.id
+                ORDER BY s.sergi_no
+            """, (kart['id'],))
+            kart['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # Toplam sergi sepet sayısını hesapla
+            kart['toplam_sergi_sepet'] = sum([s['toplam_sepet'] for s in kart['sergiler']]) if kart['sergiler'] else 0
+        
+        return jsonify(kartlar)
+        
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
 #-----------------------------------------------------------------------------------------
 @app.route('/api/scv_sera/<int:sera_id>', methods=['PATCH'])
 def update_scv_sera_bitis_tarihi(sera_id):
