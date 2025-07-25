@@ -3687,50 +3687,56 @@ def get_traktor_gelis_izmir_kirim():
         if conn:
             conn.close()
 
-@app.route('/api/traktor_gelis_izmir_kirim/dayibasi', methods=['POST'])
-def add_traktor_gelis_izmir_kirim_dayibasi():
-    data = request.get_json()
-    required_fields = ['traktor_gelis_izmir_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
-    if not all(field in data for field in required_fields):
-        return jsonify({'message': 'Eksik alanlar var.'}), 400
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        sql = """
-        INSERT INTO traktor_gelis_izmir_kirim_dayibasi (traktor_gelis_izmir_kirim_id, dayibasi_adi, bohca_sayisi)
-        VALUES (?, ?, ?)
-        """
-        params = (
-            data['traktor_gelis_izmir_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
-        )
-        cursor.execute(sql, params)
-        conn.commit()
-        return jsonify({'message': 'Traktör geliş dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-@app.route('/api/traktor_gelis_izmir_kirim_dayibasi', methods=['GET'])
-def get_traktor_gelis_izmir_kirim_dayibasi():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi ORDER BY id DESC")
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
+# --- IZMIR KIRIM yeni sistem için ---
+@app.route('/api/traktor_gelis_izmir_kirim/dayibasi', methods=['GET', 'POST', 'OPTIONS'])
+def handle_traktor_dayibasi():
+    if request.method == 'OPTIONS':
+        # Preflight request için response
+        response = jsonify({'message': 'Preflight request accepted'})
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+        return response, 200
+    elif request.method == 'POST':
+        data = request.get_json()
+        required_fields = ['traktor_gelis_izmir_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
+        if not all(field in data for field in required_fields):
+            return jsonify({'message': 'Eksik alanlar var.'}), 400
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+        try:
+            cursor = conn.cursor()
+            sql = """
+            INSERT INTO traktor_gelis_izmir_kirim_dayibasi (traktor_gelis_izmir_kirim_id, dayibasi_adi, bohca_sayisi)
+            VALUES (?, ?, ?)
+            """
+            params = (
+                data['traktor_gelis_izmir_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
+            )
+            cursor.execute(sql, params)
+            conn.commit()
+            return jsonify({'message': 'Traktör geliş dayıbaşı kaydı başarıyla eklendi.'}), 201
+        except Exception as e:
+            return jsonify({'message': f'Hata: {e}'}), 500
+        finally:
+            if conn:
+                conn.close()
+    elif request.method == 'GET':
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi ORDER BY id DESC")
+            columns = [column[0] for column in cursor.description]
+            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            return jsonify(results)
+        except Exception as e:
+            return jsonify({'message': f'Hata: {e}'}), 500
+        finally:
+            if conn:
+                conn.close()
+                
 @app.route('/api/traktor_gelis_izmir_kirim_agirlik', methods=['POST'])
 def add_traktor_gelis_izmir_kirim_agirlik():
     data = request.get_json()
