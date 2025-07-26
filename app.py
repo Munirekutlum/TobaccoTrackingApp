@@ -3981,21 +3981,24 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
             # Toplam kg hesapla
             kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
             
-            # Sergileri getir (YENİ EKLENEN KISIM)
+            # Sergileri getir (GÜNCELLENMİŞ KISIM)
             cursor.execute("""
-                SELECT s.id, s.sergi_no, s.toplam_sepet, 
-                       (150 - s.toplam_sepet) as kalan_kapasite,
-                       CASE WHEN s.toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
-                FROM sergi_kiriz s
-                JOIN sergi_sepet_dagitim d ON s.id = d.sergi_id
+                SELECT 
+                    s.id,
+                    s.sergi_no,
+                    d.sepet_sayisi as bu_traktorden_sepet,
+                    s.toplam_sepet as sergi_toplam_sepet,
+                    (150 - s.toplam_sepet) as sergi_kalan_kapasite,
+                    CASE WHEN s.toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
+                FROM sergi_sepet_dagitim d
+                JOIN sergi_kiriz s ON d.sergi_id = s.id
                 WHERE d.traktor_gelis_izmir_kirim_id = ?
-                GROUP BY s.id
                 ORDER BY s.sergi_no
             """, (kart['id'],))
             kart['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             
-            # Toplam sergi sepet sayısını hesapla
-            kart['toplam_sergi_sepet'] = sum([s['toplam_sepet'] for s in kart['sergiler']]) if kart['sergiler'] else 0
+            # Toplam sergi sepet sayısını hesapla (bu traktörün tüm sergilere eklediği sepetler)
+            kart['toplam_sergi_sepet'] = sum([s['bu_traktorden_sepet'] for s in kart['sergiler']]) if kart['sergiler'] else 0
         
         return jsonify(kartlar)
         
