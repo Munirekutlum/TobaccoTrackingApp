@@ -1075,131 +1075,6 @@ def get_users():
 
 # --- İzmir Kırım API Endpointleri ---
 #-----------------------------------------------------------------------------------------------------
-#--İzmir dizim api endpointleri----
-
-@app.route('/api/izmir_dizim/summary', methods=['GET'])
-def get_izmir_dizim_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
-                g.diziAdedi,
-                (SELECT COUNT(a.id) FROM izmir_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                (SELECT AVG(a.agirlik) FROM izmir_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
-            FROM izmir_dizim_dayibasi_table d
-            LEFT JOIN izmir_dizim_gunluk g ON d.id = g.dayibasi_id
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            if r['ortalamaAgirlik'] and r['diziAdedi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
-            else:
-                r['toplamTahminiKg'] = 0
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/izmir_dizim/dayibasi', methods=['POST'])
-def add_izmir_dizim_dayibasi():
-    data = request.get_json()
-    required = ['tarih', 'dayibasi']
-    if not all(k in data for k in required):
-        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM izmir_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO izmir_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
-        existing = cursor.fetchone()
-        if existing:
-            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
-        conn.commit()
-        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/izmir_dizim/agirlik', methods=['POST'])
-def add_izmir_dizim_agirlik():
-    data = request.get_json()
-    agirlik = data.get('agirlik')
-    yaprakSayisi = data.get('yaprakSayisi')
-    dayibasi_id = data.get('dayibasi_id')
-    if not agirlik or not dayibasi_id or not yaprakSayisi:
-        return jsonify({'message': 'dayibasi_id, agirlik ve yaprakSayisi zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_dizim_agirlik (dayibasi_id, agirlik, yaprakSayisi, yazici_adi) VALUES (?, ?, ?, ?)", (dayibasi_id, agirlik, yaprakSayisi, data['yazici_adi']))
-        conn.commit()
-        return jsonify({'message': 'Ağırlık ve yaprak sayısı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/izmir_dizim/agirlik/details', methods=['GET'])
-def get_izmir_dizim_agirlik_details():
-    dayibasi_id = request.args.get('dayibasi_id')
-    if not dayibasi_id:
-        return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik,yazici_adi,  created_at FROM izmir_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql, (dayibasi_id,))
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/izmir_dizim/gunluk', methods=['POST'])
-def add_or_update_izmir_dizim_gunluk():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
-    if not dayibasi_id or diziAdedi is None:
-        return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM izmir_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
-        existing = cursor.fetchone()
-        if existing:
-            cursor.execute("UPDATE izmir_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing[0]))
-            conn.commit()
-            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
-        else:
-            cursor.execute("INSERT INTO izmir_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
-            conn.commit()
-            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-#---izmir kutulama api endpointleri-----------
-#---izmir kutulama api endpointleri-----------
 # İzmir Kutulama için eksik endpoint'ler - Flask app'inize ekleyin
 @app.route('/api/izmir_kutulama', methods=['POST'])
 def handle_izmir_kutulama():
@@ -1264,7 +1139,7 @@ def get_bosaltilan_sergiler():
     finally:
         if conn:
             conn.close()
-                   
+
 @app.route('/api/izmir_kutulama/dolu_sergiler', methods=['GET'])
 def get_dolu_sergiler():
     """Kırım verilerinden dolu sergileri getir"""
@@ -3982,7 +3857,75 @@ def get_incomplete_sergi_kiriz():
     finally:
         if conn:
             conn.close()
-
+# Bu endpoint'i Python API dosyanıza ekleyin
+@app.route('/api/sergi_kiriz/<int:sergi_no>/detay', methods=['GET'])
+def get_sergi_detay(sergi_no):
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Sergi bilgilerini getir
+        cursor.execute("""
+            SELECT id, sergi_no, toplam_sepet,
+                   (150 - toplam_sepet) as kalan_kapasite,
+                   CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
+            FROM sergi_kiriz 
+            WHERE sergi_no = ?
+        """, (sergi_no,))
+        
+        sergi = cursor.fetchone()
+        if not sergi:
+            return jsonify({'message': f'Sergi {sergi_no} bulunamadı.'}), 404
+        
+        sergi_dict = dict(zip([col[0] for col in cursor.description], sergi))
+        
+        # Bu sergiye katkıda bulunan traktörleri getir
+        cursor.execute("""
+            SELECT 
+                t.id as traktor_id,
+                t.plaka,
+                t.tarih,
+                d.sepet_sayisi as bu_traktorden_sepet
+            FROM sergi_sepet_dagitim d
+            JOIN traktor_gelis_izmir_kirim t ON d.traktor_gelis_izmir_kirim_id = t.id
+            WHERE d.sergi_id = ?
+            ORDER BY t.tarih DESC, t.plaka
+        """, (sergi_dict['id'],))
+        
+        dagitimlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+        
+        # Her traktör için ortalama ağırlık hesapla
+        for dagitim in dagitimlar:
+            cursor.execute("""
+                SELECT AVG(agirlik) as ortalama_agirlik
+                FROM traktor_gelis_izmir_kirim_agirlik 
+                WHERE traktor_gelis_izmir_kirim_id = ?
+            """, (dagitim['traktor_id'],))
+            
+            agirlik_result = cursor.fetchone()
+            ortalama_agirlik = agirlik_result[0] if agirlik_result and agirlik_result[0] else 0
+            dagitim['toplam_kg'] = dagitim['bu_traktorden_sepet'] * ortalama_agirlik
+        
+        # Sonucu birleştir
+        result = {
+            'sergi_no': sergi_dict['sergi_no'],
+            'toplam_sepet': sergi_dict['toplam_sepet'],
+            'kalan_kapasite': sergi_dict['kalan_kapasite'],
+            'sergi_dolu': sergi_dict['sergi_dolu'],
+            'dagitimlar': dagitimlar
+        }
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+            
 @app.route('/api/traktor_gelis_izmir_kirim/summary_with_sergi', methods=['GET'])
 def get_traktor_gelis_izmir_kirim_summary_with_sergi():
     conn = get_db_connection()
