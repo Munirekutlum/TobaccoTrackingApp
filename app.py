@@ -1242,7 +1242,29 @@ def handle_izmir_kutulama():
     finally:
         if conn:
             conn.close()
-            
+
+# Flask örneği
+@app.route('/api/bosaltilan_sergiler', methods=['GET'])
+def get_bosaltilan_sergiler():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Boşaltılan sergi numaralarını al
+        cursor.execute("""
+            SELECT DISTINCT json_each.value as sergi_no
+            FROM izmir_kutulama, json_each(izmir_kutulama.sergi_numaralari)
+        """)
+        
+        results = [row['sergi_no'] for row in cursor.fetchall()]
+        return jsonify(results)
+        
+    except Exception as e:
+        return jsonify({'message': f'Hata: {str(e)}'}), 500
+    finally:
+        if conn:
+            conn.close()
+                   
 @app.route('/api/izmir_kutulama/dolu_sergiler', methods=['GET'])
 def get_dolu_sergiler():
     """Kırım verilerinden dolu sergileri getir"""
