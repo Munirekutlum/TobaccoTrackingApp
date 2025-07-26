@@ -1201,72 +1201,48 @@ def add_or_update_izmir_dizim_gunluk():
 #---izmir kutulama api endpointleri-----------
 #---izmir kutulama api endpointleri-----------
 # İzmir Kutulama için eksik endpoint'ler - Flask app'inize ekleyin
-
-@app.route('/api/izmir_kutulama', methods=['GET', 'POST', 'OPTIONS'])
+@app.route('/api/izmir_kutulama', methods=['POST'])
 def handle_izmir_kutulama():
-    if request.method == 'OPTIONS':
-        response = jsonify({'message': 'Preflight request accepted'})
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
-        return response, 200
-    
-    elif request.method == 'POST':
+    try:
         data = request.get_json()
-        required_fields = ['tarih', 'dayibasi', 'sergi_numaralari', 'kutular', 'toplam_yas_tutun', 'toplam_kuru_tutun', 'yas_kuru_orani']
         
+        # Gerekli alan kontrolü
+        required_fields = ['tarih', 'dayibasi', 'sergi_numaralari', 'kutular']
         if not all(field in data for field in required_fields):
-            return jsonify({'message': 'Eksik alanlar var.'}), 400
+            return jsonify({'message': f'Eksik alanlar: {required_fields}'}), 400
         
         conn = get_db_connection()
-        if not conn:
-            return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+        cursor = conn.cursor()
         
-        try:
-            cursor = conn.cursor()
-            sql = """
-            INSERT INTO izmir_kutulama (
-                tarih, dayibasi, sergi_numaralari, kutular, 
-                toplam_yas_tutun, toplam_kuru_tutun, yas_kuru_orani, yazici_adi
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """
-            params = (
-                data['tarih'],
-                data['dayibasi'], 
-                data['sergi_numaralari'],
-                data['kutular'],
-                data['toplam_yas_tutun'],
-                data['toplam_kuru_tutun'],
-                data['yas_kuru_orani'],
-                data.get('yazici_adi', 'Bilinmiyor')
-            )
-            cursor.execute(sql, params)
-            conn.commit()
-            return jsonify({'message': 'İzmir kutulama kaydı başarıyla eklendi.'}), 201
-            
-        except Exception as e:
-            return jsonify({'message': f'Hata: {e}'}), 500
-        finally:
-            if conn:
-                conn.close()
-    
-    elif request.method == 'GET':
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+        sql = """
+        INSERT INTO izmir_kutulama (
+            tarih, dayibasi, sergi_numaralari, kutular,
+            toplam_yas_tutun, toplam_kuru_tutun, yas_kuru_orani, yazici_adi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
         
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM izmir_kutulama ORDER BY tarih DESC, id DESC")
-            columns = [column[0] for column in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            return jsonify(results)
+        params = (
+            data['tarih'],
+            data['dayibasi'],
+            json.dumps(data['sergi_numaralari']),  # JSON string
+            json.dumps(data['kutular']),           # JSON string
+            data.get('toplam_yas_tutun', 0),
+            data.get('toplam_kuru_tutun', 0),
+            data.get('yas_kuru_orani', 0),
+            data.get('yazici_adi', 'Bilinmiyor')
+        )
+        
+        cursor.execute(sql, params)
+        conn.commit()
+        
+        return jsonify({'message': 'Kayıt başarıyla eklendi'}), 201
+        
+    except Exception as e:
+        return jsonify({'message': f'Sunucu hatası: {str(e)}'}), 500
+    finally:
+        if conn:
+            conn.close()
             
-        except Exception as e:
-            return jsonify({'message': f'Hata: {e}'}), 500
-        finally:
-            if conn:
-                conn.close()
-
 @app.route('/api/izmir_kutulama/dolu_sergiler', methods=['GET'])
 def get_dolu_sergiler():
     """Kırım verilerinden dolu sergileri getir"""
