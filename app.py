@@ -784,48 +784,6 @@ def ensure_kutulama_alan_column():
     finally:
         conn.close()
 
-def ensure_izmir_kutulama_sera_bosaltildi_column():
-    conn = get_db_connection()
-    if not conn:
-        print("Veritabanı bağlantı hatası (izmir_kutulama sera_bosaltildi sütunu kontrolü)")
-        return
-    try:
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(izmir_kutulama)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'sera_bosaltildi' not in columns:
-            print("'izmir_kutulama' tablosuna 'sera_bosaltildi' sütunu ekleniyor...")
-            cursor.execute("ALTER TABLE izmir_kutulama ADD COLUMN sera_bosaltildi TEXT DEFAULT 'hayir'")
-            conn.commit()
-            print("'sera_bosaltildi' sütunu eklendi.")
-        else:
-            print("'sera_bosaltildi' sütunu zaten var.")
-    except Exception as e:
-        print(f"'sera_bosaltildi' sütunu eklenirken hata: {e}")
-    finally:
-        conn.close()
-
-def ensure_izmir_sera_bosaltildi_column():
-    conn = get_db_connection()
-    if not conn:
-        print("Veritabanı bağlantı hatası (izmir_sera sera_bosaltildi sütunu kontrolü)")
-        return
-    try:
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(izmir_sera)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'sera_bosaltildi' not in columns:
-            print("'izmir_sera' tablosuna 'sera_bosaltildi' sütunu ekleniyor...")
-            cursor.execute("ALTER TABLE izmir_sera ADD COLUMN sera_bosaltildi TEXT DEFAULT 'hayir'")
-            conn.commit()
-            print("'sera_bosaltildi' sütunu eklendi.")
-        else:
-            print("'sera_bosaltildi' sütunu zaten var.")
-    except Exception as e:
-        print(f"'sera_bosaltildi' sütunu eklenirken hata: {e}")
-    finally:
-        conn.close()
-
 def ensure_scv_sera_new_columns():
     conn = get_db_connection()
     if not conn:
@@ -2229,217 +2187,6 @@ def bosalt_scv_sera():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# --- İzmir Sera CRUD ---
-@app.route('/api/izmir_sera', methods=['POST'])
-def add_izmir_sera():
-    data = request.json
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO izmir_sera (sera_yeri, sera_no, dizi_sayisi, dizi_kg1, dizi_kg2, dizi_kg3, dizi_kg4, dizi_kg5, dizi_kg6)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data.get('sera_yeri'),
-            data.get('sera_no'),
-            data.get('dizi_sayisi'),
-            data.get('dizi_kg1'),
-            data.get('dizi_kg2'),
-            data.get('dizi_kg3'),
-            data.get('dizi_kg4'),
-            data.get('dizi_kg5'),
-            data.get('dizi_kg6')
-        ))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/izmir_sera', methods=['GET'])
-def get_izmir_seralar():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify([])
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM izmir_sera')
-    columns = [column[0] for column in cursor.description]
-    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    return jsonify(results)
-
-@app.route('/api/izmir_sera/yerler', methods=['GET'])
-def get_izmir_sera_yerleri():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify([])
-    try:
-        cursor = conn.cursor()
-        # Hem izmir_sera tablosundan hem de izmir_sera_yerleri tablosundan sera yerlerini al
-        cursor.execute("""
-            SELECT DISTINCT sera_yeri 
-            FROM (
-                SELECT sera_yeri FROM izmir_sera
-                UNION
-                SELECT sera_yeri FROM izmir_sera_yerleri
-            ) combined_yerler
-            ORDER BY sera_yeri
-        """)
-        yerler = [row[0] for row in cursor.fetchall()]
-        return jsonify(yerler)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-@app.route('/api/izmir_sera/nolar', methods=['GET'])
-def get_izmir_sera_nolar():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify([])
-    cursor = conn.cursor()
-    cursor.execute('SELECT DISTINCT sera_no FROM izmir_sera')
-    nolar = [row[0] for row in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    return jsonify(nolar)
-
-# --- İzmir Sera Yerleri Yönetimi ---
-@app.route('/api/izmir_sera_yerleri', methods=['POST'])
-def add_izmir_sera_yeri():
-    data = request.get_json()
-    sera_yeri = data.get('sera_yeri')
-    toplam_sera_sayisi = data.get('toplam_sera_sayisi')
-    
-    if not sera_yeri or not toplam_sera_sayisi:
-        return jsonify({'message': 'Sera yeri ve toplam sera sayısı gerekli.'}), 400
-    
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO izmir_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", 
-                      (sera_yeri, toplam_sera_sayisi))
-        conn.commit()
-        return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
-    except sqlite3.IntegrityError:
-        return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-@app.route('/api/izmir_sera_yerleri', methods=['GET'])
-def get_izmir_sera_yerleri_detay():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
-                   COUNT(s.id) as mevcut_sera_sayisi
-            FROM izmir_sera_yerleri sy
-            LEFT JOIN izmir_sera s ON sy.sera_yeri = s.sera_yeri
-            GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
-            ORDER BY sy.sera_yeri
-        """)
-        
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn:
-            conn.close()
-
-# --- İzmir Sera Boşaltma ---
-@app.route('/api/izmir_sera/bosalt', methods=['POST'])
-def bosalt_izmir_sera():
-    data = request.json
-    sera_id = data.get('id')
-    tarih = data.get('tarih') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    if not sera_id:
-        return jsonify({'error': 'Sera id gerekli'}), 400
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE izmir_sera
-            SET dizi_sayisi=0, bosaltma_tarihi=?
-            WHERE id=?
-        """, (tarih, sera_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True, 'id': sera_id, 'bosaltma_tarihi': tarih})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# --- İzmir Kutulama CRUD ---
-@app.route('/api/izmir_kutulama', methods=['POST'])
-def add_izmir_kutulama():
-    data = request.json
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO izmir_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, yazici_adi, sera_bosaltildi)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data.get('tarih'),
-            data.get('dayibasi'),
-            data.get('sera_yeri'),
-            data.get('sera_no'),
-            data.get('sera_yas_kg'),
-            data.get('kutular'),
-            data.get('toplam_kuru_kg'),
-            data.get('yas_kuru_orani'),
-            data.get('yazici_adi'),
-            data.get('sera_bosaltildi', 'hayir')
-        ))
-        # Eğer sera_bosaltildi == 'evet' ise izmir_sera tablosunda dizi_sayisi=0, bosaltma_tarihi ve sera_bosaltildi güncellenmeli
-        if data.get('sera_bosaltildi') == 'evet':
-            from datetime import datetime
-            cursor.execute(
-                "UPDATE izmir_sera SET dizi_sayisi = 0, bosaltma_tarihi = ?, sera_bosaltildi = 'evet' WHERE sera_yeri = ? AND sera_no = ?",
-                (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data.get('sera_yeri'), data.get('sera_no'))
-            )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/izmir_kutulama', methods=['GET'])
-def get_izmir_kutulama():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify([])
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM izmir_kutulama')
-    columns = [column[0] for column in cursor.description]
-    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    return jsonify(results)
-
-
 
 @app.route("/")
 def home():
@@ -2548,54 +2295,213 @@ def add_sevkiyat():
         conn.close()
 
 @app.route('/api/genel_stok', methods=['GET'])
-def genel_stok():
+def get_genel_stok():
+    """Genel stok bilgilerini getir - tüm departmanlar için özet"""
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
     try:
         cursor = conn.cursor()
-        # SCV kutulama
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
-        scv_rows = cursor.fetchall()
-        alanlar = {}
-        for row in scv_rows:
-            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
-            alan = alan.strip().upper()
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+        
+        # Sonuç yapısını başlat
+        alanlar = {
+            'SCV': {
+                'kirim_kg': 0, 'kirim_bohca': 0,
+                'dizim_kg': 0, 'dizim_dizi': 0,
+                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
+                'yas_kuru_orani': 0
+            },
+            'İZMİR': {
+                'kirim_kg': 0, 'kirim_bohca': 0,
+                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
+                'yas_kuru_orani': 0
+            },
+            'FCV': {
+                'kirim_kg': 0, 'kirim_bohca': 0,
+                'dizim_kg': 0, 'dizim_dizi': 0,
+                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
+                'yas_kuru_orani': 0
+            }
+        }
+        
+        # === SCV VERİLERİ ===
+        
+        # SCV Kutulama
+        cursor.execute("""
+            SELECT sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani 
+            FROM scv_kutulama
+        """)
+        scv_kutulama_rows = cursor.fetchall()
+        
+        for row in scv_kutulama_rows:
+            sera_yas_kg = row[0] or 0
+            kutular_json = row[1] or '[]'
+            toplam_kuru_kg = row[2] or 0
+            yas_kuru_orani = row[3] or 0
+            
             try:
-                kutular_array = json.loads(kutular_json) if kutular_json else []
-                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
-            except Exception:
+                kutular = json.loads(kutular_json)
+                kutu_sayisi = len([k for k in kutular if k and k > 0])
+            except:
                 kutu_sayisi = 0
-            if alan not in alanlar:
-                alanlar[alan] = {'kutu': 0, 'kg': 0}
-            alanlar[alan]['kutu'] += kutu_sayisi
-            alanlar[alan]['kg'] += toplam_kg
-        # İzmir kutulama
-        cursor.execute("SELECT kutular, toplam_kuru_kg FROM izmir_kutulama")
+            
+            alanlar['SCV']['kirim_kg'] += sera_yas_kg
+            alanlar['SCV']['kutulama_kuru_kg'] += toplam_kuru_kg
+            alanlar['SCV']['kutulama_kutu'] += kutu_sayisi
+            if yas_kuru_orani > 0:
+                alanlar['SCV']['yas_kuru_orani'] = yas_kuru_orani
+        
+        # SCV Dizim (JTI SCV + PMI SCV + PMI Topping)
+        # JTI SCV Dizim
+        cursor.execute("""
+            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
+            FROM jti_scv_dizim_gunluk g
+            LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+            GROUP BY g.dayibasi_id, g.diziAdedi
+        """)
+        jti_scv_rows = cursor.fetchall()
+        
+        for row in jti_scv_rows:
+            dizi_adedi = row[0] or 0
+            ort_agirlik = row[1] or 0
+            alanlar['SCV']['dizim_dizi'] += dizi_adedi
+            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
+        
+        # PMI SCV Dizim
+        cursor.execute("""
+            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
+            FROM pmi_scv_dizim_gunluk g
+            LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+            GROUP BY g.dayibasi_id, g.diziAdedi
+        """)
+        pmi_scv_rows = cursor.fetchall()
+        
+        for row in pmi_scv_rows:
+            dizi_adedi = row[0] or 0
+            ort_agirlik = row[1] or 0
+            alanlar['SCV']['dizim_dizi'] += dizi_adedi
+            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
+        
+        # PMI Topping Dizim
+        cursor.execute("""
+            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
+            FROM pmi_topping_dizim_gunluk g
+            LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+            GROUP BY g.dayibasi_id, g.diziAdedi
+        """)
+        pmi_topping_rows = cursor.fetchall()
+        
+        for row in pmi_topping_rows:
+            dizi_adedi = row[0] or 0
+            ort_agirlik = row[1] or 0
+            alanlar['SCV']['dizim_dizi'] += dizi_adedi
+            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
+        
+        # PMI SCV Kutulama
+        cursor.execute("""
+            SELECT k.value as kuru_kg, y.value as yas_kg
+            FROM pmi_scv_kutulama_dayibasi_table d
+            LEFT JOIN pmi_scv_kutulama_kuru_kg k ON d.id = k.dayibasi_id
+            LEFT JOIN pmi_scv_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
+        """)
+        pmi_scv_kutulama_rows = cursor.fetchall()
+        
+        for row in pmi_scv_kutulama_rows:
+            kuru_kg = row[0] or 0
+            yas_kg = row[1] or 0
+            alanlar['SCV']['kutulama_kuru_kg'] += kuru_kg
+            alanlar['SCV']['kirim_kg'] += yas_kg
+        
+        # PMI Topping Kutulama
+        cursor.execute("""
+            SELECT k.value as kuru_kg, y.value as yas_kg
+            FROM pmi_topping_kutulama_dayibasi_table d
+            LEFT JOIN pmi_topping_kutulama_kuru_kg k ON d.id = k.dayibasi_id
+            LEFT JOIN pmi_topping_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
+        """)
+        pmi_topping_kutulama_rows = cursor.fetchall()
+        
+        for row in pmi_topping_kutulama_rows:
+            kuru_kg = row[0] or 0
+            yas_kg = row[1] or 0
+            alanlar['SCV']['kutulama_kuru_kg'] += kuru_kg
+            alanlar['SCV']['kirim_kg'] += yas_kg
+        
+        # === İZMİR VERİLERİ ===
+        
+        # İzmir Kutulama
+        cursor.execute("""
+            SELECT sergi_numaralari, kutular, toplam_yas_tutun, toplam_kuru_tutun, yas_kuru_orani
+            FROM izmir_kutulama
+        """)
         izmir_rows = cursor.fetchall()
-        izmir_kutu = 0
-        izmir_kg = 0
+        
         for row in izmir_rows:
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            sergi_json = row[0] or '[]'
+            kutular_json = row[1] or '[]'
+            yas_tutun = row[2] or 0
+            kuru_tutun = row[3] or 0
+            yas_kuru_orani = row[4] or 0
+            
             try:
-                kutular = json.loads(kutular_json) if kutular_json else []
-                izmir_kutu += len([k for k in kutular if k and k > 0])
-            except Exception:
-                pass
-            izmir_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
-        alanlar['İZMİR'] = {'kutu': izmir_kutu, 'kg': izmir_kg}
-        # Genel toplam
-        toplam_kutu = sum([v['kutu'] for v in alanlar.values()])
-        toplam_kg = sum([v['kg'] for v in alanlar.values()])
-        return jsonify({'alanlar': alanlar, 'genel': {'kutu': toplam_kutu, 'kg': toplam_kg}})
+                kutular = json.loads(kutular_json)
+                kutu_sayisi = len([k for k in kutular if k and k > 0])
+            except:
+                kutu_sayisi = 0
+            
+            alanlar['İZMİR']['kirim_kg'] += yas_tutun
+            alanlar['İZMİR']['kutulama_kuru_kg'] += kuru_tutun
+            alanlar['İZMİR']['kutulama_kutu'] += kutu_sayisi
+            if yas_kuru_orani > 0:
+                alanlar['İZMİR']['yas_kuru_orani'] = yas_kuru_orani
+        
+        # İzmir Traktor Geliş (Kırım) verileri
+        cursor.execute("""
+            SELECT SUM(tka.agirlik) as toplam_kg, COUNT(*) as bohca_sayisi
+            FROM traktor_gelis_izmir_kirim_agirlik tka
+        """)
+        izmir_kirim_row = cursor.fetchone()
+        if izmir_kirim_row:
+            alanlar['İZMİR']['kirim_kg'] += (izmir_kirim_row[0] or 0)
+            alanlar['İZMİR']['kirim_bohca'] += (izmir_kirim_row[1] or 0)
+        
+        # === FCV VERİLERİ (Şu anda boş, ileride eklenebilir) ===
+        
+        # === GENEL TOPLAM ===
+        genel = {
+            'kirim_kg': sum([alan['kirim_kg'] for alan in alanlar.values()]),
+            'kirim_bohca': sum([alan['kirim_bohca'] for alan in alanlar.values()]),
+            'dizim_kg': alanlar['SCV']['dizim_kg'] + alanlar['FCV']['dizim_kg'],  # Sadece SCV ve FCV
+            'dizim_dizi': alanlar['SCV']['dizim_dizi'] + alanlar['FCV']['dizim_dizi'],  # Sadece SCV ve FCV
+            'kutulama_kuru_kg': sum([alan['kutulama_kuru_kg'] for alan in alanlar.values()]),
+            'kutulama_kutu': sum([alan['kutulama_kutu'] for alan in alanlar.values()]),
+            'yas_kuru_orani': 0
+        }
+        
+        # Genel yaş/kuru oranını hesapla
+        if genel['kutulama_kuru_kg'] > 0:
+            genel['yas_kuru_orani'] = round(genel['kirim_kg'] / genel['kutulama_kuru_kg'], 2)
+        
+        # Departman bazlı yaş/kuru oranlarını yeniden hesapla
+        for alan_key in alanlar:
+            if alanlar[alan_key]['kutulama_kuru_kg'] > 0:
+                alanlar[alan_key]['yas_kuru_orani'] = round(
+                    alanlar[alan_key]['kirim_kg'] / alanlar[alan_key]['kutulama_kuru_kg'], 2
+                )
+        
+        return jsonify({
+            'alanlar': alanlar,
+            'genel': genel
+        })
+        
     except Exception as e:
         print(f"Genel stok hesaplama hatası: {e}")
-        return jsonify({'kutu': 0, 'kg': 0}), 500
+        return jsonify({'message': f'Hata: {str(e)}'}), 500
     finally:
-        conn.close()
-
+        if conn:
+            conn.close()
+            
 @app.route('/api/sevkiyat/reset', methods=['POST'])
 def reset_sevkiyat():
     conn = get_db_connection()
@@ -2670,28 +2576,6 @@ def update_pmi_topping_kirim_agirlik(agirlik_id):
     try:
         cursor = conn.cursor()
         cursor.execute("UPDATE pmi_topping_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
-        conn.commit()
-        if cursor.rowcount == 0:
-            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
-        return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        conn.close()
-
-@app.route('/api/izmir_dizim/agirlik/<int:agirlik_id>', methods=['PUT'])
-def update_izmir_dizim_agirlik(agirlik_id):
-    data = request.get_json()
-    agirlik = data.get('agirlik')
-    yazici_adi = data.get('yazici_adi')
-    if agirlik is None:
-        return jsonify({'message': 'agirlik zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE izmir_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3925,7 +3809,7 @@ def get_sergi_detay(sergi_no):
     finally:
         if conn:
             conn.close()
-            
+
 @app.route('/api/traktor_gelis_izmir_kirim/summary_with_sergi', methods=['GET'])
 def get_traktor_gelis_izmir_kirim_summary_with_sergi():
     conn = get_db_connection()
