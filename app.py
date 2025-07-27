@@ -1897,7 +1897,7 @@ def add_sevkiyat():
 
 @app.route('/api/genel_stok', methods=['GET'])
 def get_genel_stok():
-    """Genel stok bilgilerini getir - tüm departmanlar için özet"""
+    """Genel stok bilgilerini getir - tüm departmanlar için özet (Düzeltilmiş Versiyon)"""
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -1906,235 +1906,150 @@ def get_genel_stok():
         cursor = conn.cursor()
         
         # Sonuç yapısını başlat
-        alanlar = {
-            'SCV': {
-                'kirim_kg': 0, 'kirim_bohca': 0,
-                'dizim_kg': 0, 'dizim_dizi': 0,
-                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
-                'yas_kuru_orani': 0
+        result = {
+            'toplamlar': {
+                'SCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'IZMIR': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'FCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0}
             },
-            'İZMİR': {
-                'kirim_kg': 0, 'kirim_bohca': 0,
-                'dizim_kg': 0, 'dizim_dizi': 0,
-                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
-                'yas_kuru_orani': 0
-            },
-            'FCV': {
-                'kirim_kg': 0, 'kirim_bohca': 0,
-                'dizim_kg': 0, 'dizim_dizi': 0,
-                'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
-                'yas_kuru_orani': 0
-            }
+            'detaylar': {}
         }
+
+        # === 1. SCV BÖLÜMÜ ===
         
-        # === 1. SCV VERİLERİ ===
-        
-        # 1.1 SCV Kırım - JTI SCV
+        # 1.1 SCV Kırım (JTI + PMI)
         cursor.execute("""
-            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            SELECT 
+                COALESCE(SUM(ta.agirlik), 0) as kg, 
+                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
             FROM traktor_gelis_jti_kirim t
             LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
             LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
+            WHERE ta.agirlik > 0
         """)
-        jti_kirim_row = cursor.fetchone()
-        if jti_kirim_row:
-            alanlar['SCV']['kirim_kg'] += (jti_kirim_row[0] or 0)
-            alanlar['SCV']['kirim_bohca'] += (jti_kirim_row[1] or 0)
+        scv_kirim = cursor.fetchone()
+        result['toplamlar']['SCV']['kirim_kg'] += float(scv_kirim[0])
+        result['toplamlar']['SCV']['kirim_bohca'] += int(scv_kirim[1])
         
-        # 1.2 SCV Kırım - PMI SCV
+        # PMI SCV Kırım
         cursor.execute("""
-            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            SELECT 
+                COALESCE(SUM(ta.agirlik), 0) as kg, 
+                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
             FROM traktor_gelis_pmi_kirim t
             LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
             LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
+            WHERE ta.agirlik > 0
         """)
-        pmi_kirim_row = cursor.fetchone()
-        if pmi_kirim_row:
-            alanlar['SCV']['kirim_kg'] += (pmi_kirim_row[0] or 0)
-            alanlar['SCV']['kirim_bohca'] += (pmi_kirim_row[1] or 0)
-        
-        # 1.3 SCV Kırım - PMI Topping
+        pmi_kirim = cursor.fetchone()
+        result['toplamlar']['SCV']['kirim_kg'] += float(pmi_kirim[0])
+        result['toplamlar']['SCV']['kirim_bohca'] += int(pmi_kirim[1])
+
+        # 1.2 SCV Dizim (JTI + PMI)
         cursor.execute("""
-            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
-            FROM traktor_gelis_pmi_topping_kirim t
-            LEFT JOIN traktor_gelis_pmi_topping_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_topping_kirim_id
-            LEFT JOIN traktor_gelis_pmi_topping_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_topping_kirim_id
-        """)
-        pmi_topping_kirim_row = cursor.fetchone()
-        if pmi_topping_kirim_row:
-            alanlar['SCV']['kirim_kg'] += (pmi_topping_kirim_row[0] or 0)
-            alanlar['SCV']['kirim_bohca'] += (pmi_topping_kirim_row[1] or 0)
-        
-        # 1.4 SCV Dizim - JTI SCV
-        cursor.execute("""
-            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(a.agirlik) as toplam_kg
+            SELECT 
+                COALESCE(SUM(a.agirlik), 0) as kg, 
+                COALESCE(SUM(g.diziAdedi), 0) as dizi
             FROM jti_scv_dizim_gunluk g
             LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+            WHERE a.agirlik > 0
         """)
-        jti_dizim_row = cursor.fetchone()
-        if jti_dizim_row:
-            alanlar['SCV']['dizim_dizi'] += (jti_dizim_row[0] or 0)
-            alanlar['SCV']['dizim_kg'] += (jti_dizim_row[1] or 0)
-        
-        # 1.5 SCV Dizim - PMI SCV
-        cursor.execute("""
-            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(a.agirlik) as toplam_kg
-            FROM pmi_scv_dizim_gunluk g
-            LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-        """)
-        pmi_scv_dizim_row = cursor.fetchone()
-        if pmi_scv_dizim_row:
-            alanlar['SCV']['dizim_dizi'] += (pmi_scv_dizim_row[0] or 0)
-            alanlar['SCV']['dizim_kg'] += (pmi_scv_dizim_row[1] or 0)
-        
-        # 1.6 SCV Dizim - PMI Topping
-        cursor.execute("""
-            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(a.agirlik) as toplam_kg
-            FROM pmi_topping_dizim_gunluk g
-            LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-        """)
-        pmi_topping_dizim_row = cursor.fetchone()
-        if pmi_topping_dizim_row:
-            alanlar['SCV']['dizim_dizi'] += (pmi_topping_dizim_row[0] or 0)
-            alanlar['SCV']['dizim_kg'] += (pmi_topping_dizim_row[1] or 0)
-        
-        # 1.7 SCV Kutulama - scv_kutulama tablosu
-        cursor.execute("""
-            SELECT SUM(sera_yas_kg) as toplam_yas_kg, 
-                   SUM(toplam_kuru_kg) as toplam_kuru_kg
-            FROM scv_kutulama
-        """)
-        scv_kutulama_row = cursor.fetchone()
-        if scv_kutulama_row:
-            alanlar['SCV']['kutulama_kuru_kg'] += (scv_kutulama_row[1] or 0)
-        
-        # SCV Kutu sayısı için ayrı sorgu
+        scv_dizim = cursor.fetchone()
+        result['toplamlar']['SCV']['dizim_kg'] += float(scv_dizim[0])
+        result['toplamlar']['SCV']['dizim_dizi'] += int(scv_dizim[1])
+
+        # 1.3 SCV Kutulama
+        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
+        scv_kutulama_kg = cursor.fetchone()[0]
+        result['toplamlar']['SCV']['kutulama_kg'] += float(scv_kutulama_kg)
+
         cursor.execute("SELECT kutular FROM scv_kutulama")
-        scv_kutu_rows = cursor.fetchall()
-        scv_toplam_kutu = 0
-        for row in scv_kutu_rows:
-            try:
-                kutular = json.loads(row[0] or '[]')
-                scv_toplam_kutu += len([k for k in kutular if k and k > 0])
-            except:
-                pass
-        alanlar['SCV']['kutulama_kutu'] += scv_toplam_kutu
-        
-        # 1.8 SCV Kutulama - JTI SCV
-        cursor.execute("""
-            SELECT SUM(k.value) as toplam_kuru_kg, SUM(y.value) as toplam_yas_kg
-            FROM jti_scv_kutulama_dayibasi_table d
-            LEFT JOIN jti_scv_kutulama_kuru_kg k ON d.id = k.dayibasi_id
-            LEFT JOIN jti_scv_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
-        """)
-        jti_kutulama_row = cursor.fetchone()
-        if jti_kutulama_row:
-            alanlar['SCV']['kutulama_kuru_kg'] += (jti_kutulama_row[0] or 0)
-        
-        # === 2. İZMİR VERİLERİ ===
+        scv_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
+        result['toplamlar']['SCV']['kutulama_kutu'] += int(scv_kutu_sayisi)
+
+        # === 2. İZMİR BÖLÜMÜ ===
         
         # 2.1 İzmir Kırım
         cursor.execute("""
-            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            SELECT 
+                COALESCE(SUM(ta.agirlik), 0) as kg, 
+                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
             FROM traktor_gelis_izmir_kirim t
             LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
             LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
+            WHERE ta.agirlik > 0
         """)
-        izmir_kirim_row = cursor.fetchone()
-        if izmir_kirim_row:
-            alanlar['İZMİR']['kirim_kg'] += (izmir_kirim_row[0] or 0)
-            alanlar['İZMİR']['kirim_bohca'] += (izmir_kirim_row[1] or 0)
-        
-        # 2.2 İzmir Dizim - DÜZELTİLDİ
+        izmir_kirim = cursor.fetchone()
+        result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim[0])
+        result['toplamlar']['IZMIR']['kirim_bohca'] = int(izmir_kirim[1])
+
+        # 2.2 İzmir Dizim
         cursor.execute("""
-            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(a.agirlik) as toplam_kg
+            SELECT 
+                COALESCE(SUM(a.agirlik), 0) as kg, 
+                COALESCE(SUM(g.diziAdedi), 0) as dizi
             FROM izmir_dizim_gunluk g
             LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+            WHERE a.agirlik > 0
         """)
-        izmir_dizim_row = cursor.fetchone()
-        if izmir_dizim_row:
-            alanlar['İZMİR']['dizim_dizi'] += (izmir_dizim_row[0] or 0)
-            alanlar['İZMİR']['dizim_kg'] += (izmir_dizim_row[1] or 0)
-        
+        izmir_dizim = cursor.fetchone()
+        result['toplamlar']['IZMIR']['dizim_kg'] = float(izmir_dizim[0])
+        result['toplamlar']['IZMIR']['dizim_dizi'] = int(izmir_dizim[1])
+
         # 2.3 İzmir Kutulama
-        cursor.execute("""
-            SELECT SUM(toplam_yas_tutun) as toplam_yas_kg, 
-                   SUM(toplam_kuru_tutun) as toplam_kuru_kg
-            FROM izmir_kutulama
-        """)
-        izmir_kutulama_row = cursor.fetchone()
-        if izmir_kutulama_row:
-            alanlar['İZMİR']['kutulama_kuru_kg'] += (izmir_kutulama_row[1] or 0)
-        
-        # İzmir Kutu sayısı için ayrı sorgu
+        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
+        izmir_kutulama_kg = cursor.fetchone()[0]
+        result['toplamlar']['IZMIR']['kutulama_kg'] = float(izmir_kutulama_kg)
+
         cursor.execute("SELECT kutular FROM izmir_kutulama")
-        izmir_kutu_rows = cursor.fetchall()
-        izmir_toplam_kutu = 0
-        for row in izmir_kutu_rows:
-            try:
-                kutular = json.loads(row[0] or '[]')
-                izmir_toplam_kutu += len([k for k in kutular if k and k > 0])
-            except:
-                pass
-        alanlar['İZMİR']['kutulama_kutu'] += izmir_toplam_kutu
-        
-        # === 3. FCV VERİLERİ ===
+        izmir_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
+        result['toplamlar']['IZMIR']['kutulama_kutu'] = int(izmir_kutu_sayisi)
+
+        # === 3. FCV BÖLÜMÜ ===
         
         # 3.1 FCV Kırım
         cursor.execute("""
-            SELECT SUM(fa.agirlik) as toplam_kg, SUM(fg.bocaSayisi) as toplam_bohca
+            SELECT 
+                COALESCE(SUM(fa.agirlik), 0) as kg, 
+                COALESCE(SUM(fg.bocaSayisi), 0) as bohca
             FROM fcv_kirim_gunluk fg
             LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
+            WHERE fa.agirlik > 0
         """)
-        fcv_kirim_row = cursor.fetchone()
-        if fcv_kirim_row:
-            alanlar['FCV']['kirim_kg'] += (fcv_kirim_row[0] or 0)
-            alanlar['FCV']['kirim_bohca'] += (fcv_kirim_row[1] or 0)
-        
-        # 3.2 FCV Genel (kutulama verileri)
-        cursor.execute("""
-            SELECT SUM(yasKg) as toplam_yas_kg, SUM(kuruKg) as toplam_kuru_kg, SUM(koliSayisi) as toplam_kutu
-            FROM fcv_genel
-        """)
-        fcv_genel_row = cursor.fetchone()
-        if fcv_genel_row:
-            alanlar['FCV']['kutulama_kuru_kg'] += (fcv_genel_row[1] or 0)
-            alanlar['FCV']['kutulama_kutu'] += (fcv_genel_row[2] or 0)
-        
-        # === 4. GENEL TOPLAM ===
-        genel = {
-            'kirim_kg': sum([alan['kirim_kg'] for alan in alanlar.values()]),
-            'kirim_bohca': sum([alan['kirim_bohca'] for alan in alanlar.values()]),
-            'dizim_kg': sum([alan['dizim_kg'] for alan in alanlar.values()]),
-            'dizim_dizi': sum([alan['dizim_dizi'] for alan in alanlar.values()]),
-            'kutulama_kuru_kg': sum([alan['kutulama_kuru_kg'] for alan in alanlar.values()]),
-            'kutulama_kutu': sum([alan['kutulama_kutu'] for alan in alanlar.values()]),
-            'yas_kuru_orani': 0
+        fcv_kirim = cursor.fetchone()
+        result['toplamlar']['FCV']['kirim_kg'] = float(fcv_kirim[0])
+        result['toplamlar']['FCV']['kirim_bohca'] = int(fcv_kirim[1])
+
+        # 3.2 FCV Kutulama
+        cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0")
+        fcv_kutulama = cursor.fetchone()
+        result['toplamlar']['FCV']['kutulama_kg'] = float(fcv_kutulama[0])
+        result['toplamlar']['FCV']['kutulama_kutu'] = int(fcv_kutulama[1])
+
+        # === GENEL TOPLAMLAR ===
+        result['genel_toplam'] = {
+            'kirim_kg': round(result['toplamlar']['SCV']['kirim_kg'] + result['toplamlar']['IZMIR']['kirim_kg'] + result['toplamlar']['FCV']['kirim_kg'], 2),
+            'kirim_bohca': result['toplamlar']['SCV']['kirim_bohca'] + result['toplamlar']['IZMIR']['kirim_bohca'] + result['toplamlar']['FCV']['kirim_bohca'],
+            'kutulama_kg': round(result['toplamlar']['SCV']['kutulama_kg'] + result['toplamlar']['IZMIR']['kutulama_kg'] + result['toplamlar']['FCV']['kutulama_kg'], 2),
+            'kutulama_kutu': result['toplamlar']['SCV']['kutulama_kutu'] + result['toplamlar']['IZMIR']['kutulama_kutu'] + result['toplamlar']['FCV']['kutulama_kutu']
         }
-        
-        # Yaş/kuru oranlarını hesapla
-        if genel['kutulama_kuru_kg'] > 0:
-            genel['yas_kuru_orani'] = round(genel['kirim_kg'] / genel['kutulama_kuru_kg'], 2)
-        
-        # Departman bazlı yaş/kuru oranlarını hesapla
-        for alan_key in alanlar:
-            if alanlar[alan_key]['kutulama_kuru_kg'] > 0:
-                alanlar[alan_key]['yas_kuru_orani'] = round(
-                    alanlar[alan_key]['kirim_kg'] / alanlar[alan_key]['kutulama_kuru_kg'], 2
-                )
-        
-        return jsonify({
-            'alanlar': alanlar,
-            'genel': genel
-        })
+
+        # Yaş-Kuru Oranı Hesaplama
+        if result['genel_toplam']['kutulama_kg'] > 0:
+            result['genel_toplam']['yas_kuru_orani'] = round(
+                result['genel_toplam']['kirim_kg'] / result['genel_toplam']['kutulama_kg'], 2
+            )
+        else:
+            result['genel_toplam']['yas_kuru_orani'] = 0
+
+        return jsonify(result)
         
     except Exception as e:
-        print(f"Genel stok hesaplama hatası: {e}")
-        return jsonify({'message': f'Hata: {str(e)}'}), 500
+        print(f"Hata: {str(e)}")
+        return jsonify({'error': f'Veritabanı hatası: {str(e)}'}), 500
     finally:
         if conn:
             conn.close()
-            
 @app.route('/api/sevkiyat/reset', methods=['POST'])
 def reset_sevkiyat():
     conn = get_db_connection()
