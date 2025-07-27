@@ -1970,20 +1970,18 @@ def get_genel_stok():
         # === 2. İZMİR BÖLÜMÜ ===
         
         # 2.1 İzmir Kırım
+        # 2.1 İzmir Kırım (Sadece ağırlık toplamı)
         cursor.execute("""
             SELECT 
-                COALESCE(SUM(ta.agirlik), 0) as kg, 
-                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                COALESCE(SUM(ta.agirlik), 0) as kg
             FROM traktor_gelis_izmir_kirim t
             LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
-            LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
             WHERE ta.agirlik > 0
         """)
-        izmir_kirim = cursor.fetchone()
-        result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim[0])
-        result['toplamlar']['IZMIR']['kirim_bohca'] = int(izmir_kirim[1])
-
-        # 2.2 İzmir Dizim
+        izmir_kirim_kg = cursor.fetchone()[0]
+        result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim_kg)
+        result['toplamlar']['IZMIR']['kirim_bohca'] = 0  # Bohça bilgisi istemiyorsanız 0 olarak ayarlayın
+                # 2.2 İzmir Dizim
         cursor.execute("""
             SELECT 
                 COALESCE(SUM(a.agirlik), 0) as kg, 
