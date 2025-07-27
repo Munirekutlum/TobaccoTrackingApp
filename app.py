@@ -147,37 +147,6 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
-            'izmir_genel': '''CREATE TABLE IF NOT EXISTS izmir_genel (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'izmir_kirim': '''CREATE TABLE IF NOT EXISTS izmir_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'izmir_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS izmir_kirim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                UNIQUE(dayibasi, tarih)
-            );''',
-            'izmir_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS izmir_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                bohcaSayisi INTEGER,
-                agirlik_id INTEGER,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id)
-            );''',
-            'izmir_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS izmir_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                agirlik REAL NOT NULL,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES izmir_kirim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
             'izmir_kutulama': '''CREATE TABLE IF NOT EXISTS izmir_kutulama (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tarih TEXT NOT NULL,
@@ -189,48 +158,6 @@ def initialize_db():
                 yas_kuru_orani REAL NOT NULL,
                 yazici_adi TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );''',
-            'izmir_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS izmir_kutulama_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );''',
-            'izmir_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS izmir_kutulama_kuru_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'izmir_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS izmir_kutulama_sera_yas_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES izmir_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'izmir_sera': '''CREATE TABLE IF NOT EXISTS izmir_sera (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sera_yeri TEXT,
-                sera_no TEXT,
-                dizi_sayisi INTEGER,
-                dizi_kg1 REAL,
-                dizi_kg2 REAL,
-                dizi_kg3 REAL,
-                dizi_kg4 REAL,
-                dizi_kg5 REAL,
-                dizi_kg6 REAL,
-                bosaltma_tarihi TEXT,
-                sera_bosaltildi TEXT DEFAULT 'hayir',
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );''',
-            'izmir_sera_yerleri': '''CREATE TABLE IF NOT EXISTS izmir_sera_yerleri (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sera_yeri TEXT NOT NULL UNIQUE,
-                toplam_sera_sayisi INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );''',
             'jti_scv_kirim': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -335,83 +262,8 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
-            'pmi_scv_kirim': '''CREATE TABLE IF NOT EXISTS pmi_scv_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'pmi_scv_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL
-            );''',
-            'pmi_scv_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                bohcaSayisi INTEGER NOT NULL,
-                agirlik_id INTEGER,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id)
-            );''',
-            'pmi_scv_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_scv_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                agirlik REAL NOT NULL,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_scv_kutulama': '''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'pmi_scv_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );''',
-            'pmi_scv_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_kuru_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_scv_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS pmi_scv_kutulama_sera_yas_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_topping_kirim': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'pmi_topping_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                UNIQUE(dayibasi, tarih)
-            );''',
-            'pmi_topping_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                bohcaSayisi INTEGER,
-                agirlik_id INTEGER,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id)
-            );''',
-            'pmi_topping_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                agirlik REAL NOT NULL,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
+
+            
             'pmi_topping_dizim': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 placeholder_col TEXT
@@ -437,30 +289,6 @@ def initialize_db():
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_topping_kutulama': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                placeholder_col TEXT
-            );''',
-            'pmi_topping_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );''',
-            'pmi_topping_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_kuru_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_topping_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_sera_yas_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'scv_sera': '''CREATE TABLE IF NOT EXISTS scv_sera (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -521,29 +349,7 @@ def initialize_db():
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
-            'pmi_topping_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                UNIQUE(dayibasi, tarih)
-            );''',
-            'pmi_topping_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                bohcaSayisi INTEGER,
-                agirlik_id INTEGER,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id)
-            );''',
-            'pmi_topping_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                agirlik REAL NOT NULL,
-                yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kirim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
+
             'pmi_topping_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_dayibasi_table (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 tarih TEXT NOT NULL,
@@ -565,26 +371,6 @@ def initialize_db():
                 yazici_adi TEXT,
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_topping_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tarih TEXT NOT NULL,
-                dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
-            );''',
-            'pmi_topping_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_kuru_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
-            );''',
-            'pmi_topping_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS pmi_topping_kutulama_sera_yas_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                dayibasi_id INTEGER NOT NULL,
-                value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_kutulama_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'sevkiyat': '''CREATE TABLE IF NOT EXISTS sevkiyat (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1489,101 +1275,6 @@ def add_or_update_pmi_scv_dizim_gunluk():
     finally:
         if conn: conn.close()
 
-#--scv pmı kutulama api endpointleri------
-#--scv pmı kutulama api endpointleri------
-
-@app.route('/api/pmi_scv_kutulama/summary', methods=['GET'])
-def get_pmi_scv_kutulama_summary():
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi
-            FROM pmi_scv_kutulama_dayibasi_table d
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
-        columns = [column[0] for column in cursor.description]
-        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        for r in results:
-            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM pmi_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
-            r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
-            r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
-            r['yasKuruOrani'] = r['toplamKuruKg'] > 0 and (r['toplamYasKg'] / r['toplamKuruKg']) or 0
-        return jsonify(results)
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/pmi_scv_kutulama/dayibasi', methods=['POST'])
-def add_pmi_scv_kutulama_dayibasi():
-    data = request.get_json()
-    required = ['tarih', 'dayibasi']
-    if not all(k in data for k in required):
-        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_scv_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO pmi_scv_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
-        existing = cursor.fetchone()
-        if existing:
-            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
-        conn.commit()
-        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/pmi_scv_kutulama/kuru_kg', methods=['POST'])
-def add_pmi_scv_kutulama_kuru_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/pmi_scv_kutulama/sera_yas_kg', methods=['POST'])
-def add_pmi_scv_kutulama_sera_yas_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
 #-----------------------------------------------------------------------------------------------------------
 #------scv pmi topping dizim api endpointleri----
 
@@ -1728,69 +1419,6 @@ def add_or_update_pmi_topping_dizim_gunluk():
             cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-#----- scv pmi topping kutulama api endpointleri---------
-@app.route('/api/pmi_topping_kutulama/dayibasi', methods=['POST'])
-def add_pmi_topping_kutulama_dayibasi():
-    data = request.get_json()
-    required = ['tarih', 'dayibasi']
-    if not all(k in data for k in required):
-        return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_topping_kutulama_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO pmi_topping_kutulama_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
-        existing = cursor.fetchone()
-        if existing:
-            return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
-        conn.commit()
-        return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/pmi_topping_kutulama/kuru_kg', methods=['POST'])
-def add_pmi_topping_kutulama_kuru_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_kutulama_kuru_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Kuru kg başarıyla eklendi.'}), 201
-    except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
-    finally:
-        if conn: conn.close()
-
-@app.route('/api/pmi_topping_kutulama/sera_yas_kg', methods=['POST'])
-def add_pmi_topping_kutulama_sera_yas_kg():
-    data = request.get_json()
-    dayibasi_id = data.get('dayibasi_id')
-    value = data.get('value')
-    if not dayibasi_id or value is None:
-        return jsonify({'message': 'dayibasi_id ve value zorunludur.'}), 400
-    conn = get_db_connection()
-    if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_kutulama_sera_yas_kg (dayibasi_id, value) VALUES (?, ?)", (dayibasi_id, value))
-        conn.commit()
-        return jsonify({'message': 'Sera yaş kg başarıyla eklendi.'}), 201
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
@@ -2191,46 +1819,6 @@ def bosalt_scv_sera():
 @app.route("/")
 def home():
     return "API çalışıyor!"
-
-def get_genel_stok():
-    conn = get_db_connection()
-    if not conn:
-        return {'kutu': 0, 'kg': 0}
-    try:
-        cursor = conn.cursor()
-        # SCV kutulama
-        cursor.execute("SELECT kutular, toplam_kuru_kg FROM scv_kutulama")
-        scv_rows = cursor.fetchall()
-        scv_kutu = 0
-        scv_kg = 0
-        for row in scv_rows:
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            try:
-                kutular = json.loads(kutular_json) if kutular_json else []
-                scv_kutu += len([k for k in kutular if k and k > 0])
-            except Exception:
-                pass
-            scv_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
-        # İzmir kutulama
-        cursor.execute("SELECT kutular, toplam_kuru_kg FROM izmir_kutulama")
-        izmir_rows = cursor.fetchall()
-        izmir_kutu = 0
-        izmir_kg = 0
-        for row in izmir_rows:
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            try:
-                kutular = json.loads(kutular_json) if kutular_json else []
-                izmir_kutu += len([k for k in kutular if k and k > 0])
-            except Exception:
-                pass
-            izmir_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
-        return {'kutu': scv_kutu + izmir_kutu, 'kg': scv_kg + izmir_kg}
-    except Exception as e:
-        print(f"Genel stok hesaplama hatası: {e}")
-        return {'kutu': 0, 'kg': 0}
-    finally:
-        conn.close()
-
 # Sevkiyat ekleme endpoint örneği (varsa, yoksa ekleyin):
 @app.route('/api/sevkiyat', methods=['POST'])
 def add_sevkiyat():
@@ -2314,6 +1902,7 @@ def get_genel_stok():
             },
             'İZMİR': {
                 'kirim_kg': 0, 'kirim_bohca': 0,
+                'dizim_kg': 0, 'dizim_dizi': 0,
                 'kutulama_kuru_kg': 0, 'kutulama_kutu': 0,
                 'yas_kuru_orani': 0
             },
@@ -2325,20 +1914,90 @@ def get_genel_stok():
             }
         }
         
-        # === SCV VERİLERİ ===
+        # === 1. SCV VERİLERİ ===
         
-        # SCV Kutulama
+        # 1.1 SCV Kırım - JTI SCV
         cursor.execute("""
-            SELECT sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani 
+            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            FROM traktor_gelis_jti_kirim t
+            LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
+            LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
+        """)
+        jti_kirim_row = cursor.fetchone()
+        if jti_kirim_row:
+            alanlar['SCV']['kirim_kg'] += (jti_kirim_row[0] or 0)
+            alanlar['SCV']['kirim_bohca'] += (jti_kirim_row[1] or 0)
+        
+        # 1.2 SCV Kırım - PMI SCV
+        cursor.execute("""
+            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            FROM traktor_gelis_pmi_kirim t
+            LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
+            LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
+        """)
+        pmi_kirim_row = cursor.fetchone()
+        if pmi_kirim_row:
+            alanlar['SCV']['kirim_kg'] += (pmi_kirim_row[0] or 0)
+            alanlar['SCV']['kirim_bohca'] += (pmi_kirim_row[1] or 0)
+        
+        # 1.3 SCV Kırım - PMI Topping
+        cursor.execute("""
+            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            FROM traktor_gelis_pmi_topping_kirim t
+            LEFT JOIN traktor_gelis_pmi_topping_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_topping_kirim_id
+            LEFT JOIN traktor_gelis_pmi_topping_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_topping_kirim_id
+        """)
+        pmi_topping_kirim_row = cursor.fetchone()
+        if pmi_topping_kirim_row:
+            alanlar['SCV']['kirim_kg'] += (pmi_topping_kirim_row[0] or 0)
+            alanlar['SCV']['kirim_bohca'] += (pmi_topping_kirim_row[1] or 0)
+        
+        # 1.4 SCV Dizim - JTI SCV
+        cursor.execute("""
+            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(g.diziAdedi * COALESCE(a.agirlik, 0)) as toplam_kg
+            FROM jti_scv_dizim_gunluk g
+            LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+        """)
+        jti_dizim_row = cursor.fetchone()
+        if jti_dizim_row:
+            alanlar['SCV']['dizim_dizi'] += (jti_dizim_row[0] or 0)
+            alanlar['SCV']['dizim_kg'] += (jti_dizim_row[1] or 0)
+        
+        # 1.5 SCV Dizim - PMI SCV
+        cursor.execute("""
+            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(g.diziAdedi * COALESCE(a.agirlik, 0)) as toplam_kg
+            FROM pmi_scv_dizim_gunluk g
+            LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+        """)
+        pmi_scv_dizim_row = cursor.fetchone()
+        if pmi_scv_dizim_row:
+            alanlar['SCV']['dizim_dizi'] += (pmi_scv_dizim_row[0] or 0)
+            alanlar['SCV']['dizim_kg'] += (pmi_scv_dizim_row[1] or 0)
+        
+        # 1.6 SCV Dizim - PMI Topping
+        cursor.execute("""
+            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(g.diziAdedi * COALESCE(a.agirlik, 0)) as toplam_kg
+            FROM pmi_topping_dizim_gunluk g
+            LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+        """)
+        pmi_topping_dizim_row = cursor.fetchone()
+        if pmi_topping_dizim_row:
+            alanlar['SCV']['dizim_dizi'] += (pmi_topping_dizim_row[0] or 0)
+            alanlar['SCV']['dizim_kg'] += (pmi_topping_dizim_row[1] or 0)
+        
+        # 1.7 SCV Kutulama - scv_kutulama tablosu
+        cursor.execute("""
+            SELECT SUM(sera_yas_kg) as toplam_yas_kg, 
+                   SUM(toplam_kuru_kg) as toplam_kuru_kg,
+                   kutular
             FROM scv_kutulama
         """)
         scv_kutulama_rows = cursor.fetchall()
         
         for row in scv_kutulama_rows:
             sera_yas_kg = row[0] or 0
-            kutular_json = row[1] or '[]'
-            toplam_kuru_kg = row[2] or 0
-            yas_kuru_orani = row[3] or 0
+            toplam_kuru_kg = row[1] or 0
+            kutular_json = row[2] or '[]'
             
             try:
                 kutular = json.loads(kutular_json)
@@ -2346,144 +2005,107 @@ def get_genel_stok():
             except:
                 kutu_sayisi = 0
             
-            alanlar['SCV']['kirim_kg'] += sera_yas_kg
             alanlar['SCV']['kutulama_kuru_kg'] += toplam_kuru_kg
             alanlar['SCV']['kutulama_kutu'] += kutu_sayisi
-            if yas_kuru_orani > 0:
-                alanlar['SCV']['yas_kuru_orani'] = yas_kuru_orani
         
-        # SCV Dizim (JTI SCV + PMI SCV + PMI Topping)
-        # JTI SCV Dizim
+        # 1.8 SCV Kutulama - JTI SCV
         cursor.execute("""
-            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
-            FROM jti_scv_dizim_gunluk g
-            LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-            GROUP BY g.dayibasi_id, g.diziAdedi
+            SELECT SUM(k.value) as toplam_kuru_kg, SUM(y.value) as toplam_yas_kg
+            FROM jti_scv_kutulama_dayibasi_table d
+            LEFT JOIN jti_scv_kutulama_kuru_kg k ON d.id = k.dayibasi_id
+            LEFT JOIN jti_scv_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
         """)
-        jti_scv_rows = cursor.fetchall()
+        jti_kutulama_row = cursor.fetchone()
+        if jti_kutulama_row:
+            alanlar['SCV']['kutulama_kuru_kg'] += (jti_kutulama_row[0] or 0)
         
-        for row in jti_scv_rows:
-            dizi_adedi = row[0] or 0
-            ort_agirlik = row[1] or 0
-            alanlar['SCV']['dizim_dizi'] += dizi_adedi
-            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
+        # === 2. İZMİR VERİLERİ ===
         
-        # PMI SCV Dizim
+        # 2.1 İzmir Kırım
         cursor.execute("""
-            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
-            FROM pmi_scv_dizim_gunluk g
-            LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-            GROUP BY g.dayibasi_id, g.diziAdedi
-        """)
-        pmi_scv_rows = cursor.fetchall()
-        
-        for row in pmi_scv_rows:
-            dizi_adedi = row[0] or 0
-            ort_agirlik = row[1] or 0
-            alanlar['SCV']['dizim_dizi'] += dizi_adedi
-            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
-        
-        # PMI Topping Dizim
-        cursor.execute("""
-            SELECT g.diziAdedi, AVG(a.agirlik) as ort_agirlik
-            FROM pmi_topping_dizim_gunluk g
-            LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-            GROUP BY g.dayibasi_id, g.diziAdedi
-        """)
-        pmi_topping_rows = cursor.fetchall()
-        
-        for row in pmi_topping_rows:
-            dizi_adedi = row[0] or 0
-            ort_agirlik = row[1] or 0
-            alanlar['SCV']['dizim_dizi'] += dizi_adedi
-            alanlar['SCV']['dizim_kg'] += (dizi_adedi * ort_agirlik)
-        
-        # PMI SCV Kutulama
-        cursor.execute("""
-            SELECT k.value as kuru_kg, y.value as yas_kg
-            FROM pmi_scv_kutulama_dayibasi_table d
-            LEFT JOIN pmi_scv_kutulama_kuru_kg k ON d.id = k.dayibasi_id
-            LEFT JOIN pmi_scv_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
-        """)
-        pmi_scv_kutulama_rows = cursor.fetchall()
-        
-        for row in pmi_scv_kutulama_rows:
-            kuru_kg = row[0] or 0
-            yas_kg = row[1] or 0
-            alanlar['SCV']['kutulama_kuru_kg'] += kuru_kg
-            alanlar['SCV']['kirim_kg'] += yas_kg
-        
-        # PMI Topping Kutulama
-        cursor.execute("""
-            SELECT k.value as kuru_kg, y.value as yas_kg
-            FROM pmi_topping_kutulama_dayibasi_table d
-            LEFT JOIN pmi_topping_kutulama_kuru_kg k ON d.id = k.dayibasi_id
-            LEFT JOIN pmi_topping_kutulama_sera_yas_kg y ON d.id = y.dayibasi_id
-        """)
-        pmi_topping_kutulama_rows = cursor.fetchall()
-        
-        for row in pmi_topping_kutulama_rows:
-            kuru_kg = row[0] or 0
-            yas_kg = row[1] or 0
-            alanlar['SCV']['kutulama_kuru_kg'] += kuru_kg
-            alanlar['SCV']['kirim_kg'] += yas_kg
-        
-        # === İZMİR VERİLERİ ===
-        
-        # İzmir Kutulama
-        cursor.execute("""
-            SELECT sergi_numaralari, kutular, toplam_yas_tutun, toplam_kuru_tutun, yas_kuru_orani
-            FROM izmir_kutulama
-        """)
-        izmir_rows = cursor.fetchall()
-        
-        for row in izmir_rows:
-            sergi_json = row[0] or '[]'
-            kutular_json = row[1] or '[]'
-            yas_tutun = row[2] or 0
-            kuru_tutun = row[3] or 0
-            yas_kuru_orani = row[4] or 0
-            
-            try:
-                kutular = json.loads(kutular_json)
-                kutu_sayisi = len([k for k in kutular if k and k > 0])
-            except:
-                kutu_sayisi = 0
-            
-            alanlar['İZMİR']['kirim_kg'] += yas_tutun
-            alanlar['İZMİR']['kutulama_kuru_kg'] += kuru_tutun
-            alanlar['İZMİR']['kutulama_kutu'] += kutu_sayisi
-            if yas_kuru_orani > 0:
-                alanlar['İZMİR']['yas_kuru_orani'] = yas_kuru_orani
-        
-        # İzmir Traktor Geliş (Kırım) verileri
-        cursor.execute("""
-            SELECT SUM(tka.agirlik) as toplam_kg, COUNT(*) as bohca_sayisi
-            FROM traktor_gelis_izmir_kirim_agirlik tka
+            SELECT SUM(ta.agirlik) as toplam_kg, SUM(td.bohca_sayisi) as toplam_bohca
+            FROM traktor_gelis_izmir_kirim t
+            LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
+            LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
         """)
         izmir_kirim_row = cursor.fetchone()
         if izmir_kirim_row:
             alanlar['İZMİR']['kirim_kg'] += (izmir_kirim_row[0] or 0)
             alanlar['İZMİR']['kirim_bohca'] += (izmir_kirim_row[1] or 0)
         
-        # === FCV VERİLERİ (Şu anda boş, ileride eklenebilir) ===
+        # 2.2 İzmir Dizim
+        cursor.execute("""
+            SELECT SUM(g.diziAdedi) as toplam_dizi, SUM(a.agirlik * a.yaprakSayisi) as toplam_kg
+            FROM izmir_dizim_gunluk g
+            LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+        """)
+        izmir_dizim_row = cursor.fetchone()
+        if izmir_dizim_row:
+            alanlar['İZMİR']['dizim_dizi'] += (izmir_dizim_row[0] or 0)
+            alanlar['İZMİR']['dizim_kg'] += (izmir_dizim_row[1] or 0)
         
-        # === GENEL TOPLAM ===
+        # 2.3 İzmir Kutulama
+        cursor.execute("""
+            SELECT SUM(toplam_yas_tutun) as toplam_yas_kg, 
+                   SUM(toplam_kuru_tutun) as toplam_kuru_kg,
+                   kutular
+            FROM izmir_kutulama
+        """)
+        izmir_kutulama_rows = cursor.fetchall()
+        
+        for row in izmir_kutulama_rows:
+            yas_tutun = row[0] or 0
+            kuru_tutun = row[1] or 0
+            kutular_json = row[2] or '[]'
+            
+            try:
+                kutular = json.loads(kutular_json)
+                kutu_sayisi = len([k for k in kutular if k and k > 0])
+            except:
+                kutu_sayisi = 0
+            
+            alanlar['İZMİR']['kutulama_kuru_kg'] += kuru_tutun
+            alanlar['İZMİR']['kutulama_kutu'] += kutu_sayisi
+        
+        # === 3. FCV VERİLERİ ===
+        
+        # 3.1 FCV Kırım
+        cursor.execute("""
+            SELECT SUM(fa.agirlik) as toplam_kg, SUM(fg.bocaSayisi) as toplam_bohca
+            FROM fcv_kirim_gunluk fg
+            LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
+        """)
+        fcv_kirim_row = cursor.fetchone()
+        if fcv_kirim_row:
+            alanlar['FCV']['kirim_kg'] += (fcv_kirim_row[0] or 0)
+            alanlar['FCV']['kirim_bohca'] += (fcv_kirim_row[1] or 0)
+        
+        # 3.2 FCV Genel (kutulama verileri)
+        cursor.execute("""
+            SELECT SUM(yasKg) as toplam_yas_kg, SUM(kuruKg) as toplam_kuru_kg, SUM(koliSayisi) as toplam_kutu
+            FROM fcv_genel
+        """)
+        fcv_genel_row = cursor.fetchone()
+        if fcv_genel_row:
+            alanlar['FCV']['kutulama_kuru_kg'] += (fcv_genel_row[1] or 0)
+            alanlar['FCV']['kutulama_kutu'] += (fcv_genel_row[2] or 0)
+        
+        # === 4. GENEL TOPLAM ===
         genel = {
             'kirim_kg': sum([alan['kirim_kg'] for alan in alanlar.values()]),
             'kirim_bohca': sum([alan['kirim_bohca'] for alan in alanlar.values()]),
-            'dizim_kg': alanlar['SCV']['dizim_kg'] + alanlar['FCV']['dizim_kg'],  # Sadece SCV ve FCV
-            'dizim_dizi': alanlar['SCV']['dizim_dizi'] + alanlar['FCV']['dizim_dizi'],  # Sadece SCV ve FCV
+            'dizim_kg': sum([alan['dizim_kg'] for alan in alanlar.values()]),
+            'dizim_dizi': sum([alan['dizim_dizi'] for alan in alanlar.values()]),
             'kutulama_kuru_kg': sum([alan['kutulama_kuru_kg'] for alan in alanlar.values()]),
             'kutulama_kutu': sum([alan['kutulama_kutu'] for alan in alanlar.values()]),
             'yas_kuru_orani': 0
         }
         
-        # Genel yaş/kuru oranını hesapla
+        # Yaş/kuru oranlarını hesapla
         if genel['kutulama_kuru_kg'] > 0:
             genel['yas_kuru_orani'] = round(genel['kirim_kg'] / genel['kutulama_kuru_kg'], 2)
         
-        # Departman bazlı yaş/kuru oranlarını yeniden hesapla
+        # Departman bazlı yaş/kuru oranlarını hesapla
         for alan_key in alanlar:
             if alanlar[alan_key]['kutulama_kuru_kg'] > 0:
                 alanlar[alan_key]['yas_kuru_orani'] = round(
@@ -2501,7 +2123,7 @@ def get_genel_stok():
     finally:
         if conn:
             conn.close()
-            
+
 @app.route('/api/sevkiyat/reset', methods=['POST'])
 def reset_sevkiyat():
     conn = get_db_connection()
