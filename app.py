@@ -3597,8 +3597,6 @@ if __name__ == '__main__':
     print(" Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
         ensure_kutulama_alan_column()
-        ensure_izmir_kutulama_sera_bosaltildi_column()
-        ensure_izmir_sera_bosaltildi_column()
         ensure_scv_sera_new_columns()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
