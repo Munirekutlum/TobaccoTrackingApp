@@ -2133,7 +2133,9 @@ def get_genel_stok():
         return jsonify({'message': f'Hata: {str(e)}'}), 500
     finally:
         if conn:
-            conn.close()@app.route('/api/sevkiyat/reset', methods=['POST'])
+            conn.close()
+            
+@app.route('/api/sevkiyat/reset', methods=['POST'])
 def reset_sevkiyat():
     conn = get_db_connection()
     if not conn:
