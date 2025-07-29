@@ -1832,44 +1832,59 @@ def bosalt_scv_sera():
 @app.route("/")
 def home():
     return "API çalışıyor!"
-# Sevkiyat ekleme endpoint örneği (varsa, yoksa ekleyin):
-@app.route('/api/sevkiyat', methods=['POST'])
-def add_sevkiyat():
-    data = request.get_json()
-    istenen_kutu = int(data.get('kutu', 0))
-    istenen_kg = float(data.get('kg', 0))
-    alan = data.get('alan', '').strip().upper()
-    stok = None
-    genel_stok = None
-    # Alan bazında stok kontrolü
+
+
+# Alan stok bilgilerini getiren endpoint
+@app.route('/api/alan_stok', methods=['GET'])
+def get_alan_stok():
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
     try:
         cursor = conn.cursor()
-        # SCV kutulama
+        alanlar = {}
+        
+        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla
         cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         scv_rows = cursor.fetchall()
-        alanlar = {}
+        
         for row in scv_rows:
             row_alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
             row_alan = row_alan.strip().upper()
+            
+            # Alan adını normalize et
+            if 'JTI' in row_alan and 'SCV' in row_alan:
+                alan_key = 'JTI SCV'
+            elif 'PMI' in row_alan and 'SCV' in row_alan:
+                alan_key = 'PMI SCV'
+            elif 'PMI' in row_alan and 'TOPPING' in row_alan:
+                alan_key = 'PMI TOPPING'
+            else:
+                alan_key = row_alan
+            
             kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
             toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            
             try:
                 kutular_array = json.loads(kutular_json) if kutular_json else []
                 kutu_sayisi = len([k for k in kutular_array if k and k > 0])
             except Exception:
                 kutu_sayisi = 0
-            if row_alan not in alanlar:
-                alanlar[row_alan] = {'kutu': 0, 'kg': 0}
-            alanlar[row_alan]['kutu'] += kutu_sayisi
-            alanlar[row_alan]['kg'] += toplam_kg
-        # İzmir kutulama
-        cursor.execute("SELECT kutular, toplam_kuru_kg FROM izmir_kutulama")
+            
+            if alan_key not in alanlar:
+                alanlar[alan_key] = {'kutu': 0, 'kg': 0}
+            
+            alanlar[alan_key]['kutu'] += kutu_sayisi
+            alanlar[alan_key]['kg'] += toplam_kg
+        
+        # İzmir kutulama verilerini al - ayrı tablo
+        cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
+        
         izmir_kutu = 0
         izmir_kg = 0
+        
         for row in izmir_rows:
             kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
             try:
@@ -1877,23 +1892,277 @@ def add_sevkiyat():
                 izmir_kutu += len([k for k in kutular if k and k > 0])
             except Exception:
                 pass
-            izmir_kg += row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            
+            izmir_kg += row['toplam_kuru_tutun'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_tutun', 0) or 0
+        
         alanlar['İZMİR'] = {'kutu': izmir_kutu, 'kg': izmir_kg}
-        # Alan stokunu bul
-        stok = alanlar.get(alan, {'kutu': 0, 'kg': 0})
-        genel_stok = {'kutu': sum([v['kutu'] for v in alanlar.values()]), 'kg': sum([v['kg'] for v in alanlar.values()])}
-        if istenen_kutu > stok['kutu'] or istenen_kg > stok['kg']:
-            return jsonify({'message': f'Stokta bu kadar ürün yok! (Alan: {alan}, Kutu: {stok["kutu"]}, KG: {stok["kg"]})'}), 400
-        # Stoktan düşme işlemi (alan bazında)
-        # ... (mevcut kodunuzu buraya ekleyin, alan bazında düşme için gerekirse güncelleyin)
-        # Sevkiyat kaydını ekle
-        cursor.execute("INSERT INTO sevkiyat (tarih, kutu, kg) VALUES (?, ?, ?)", (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), istenen_kutu, istenen_kg))
-        conn.commit()
-        return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
+        
+        return jsonify(alanlar), 200
+        
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
         conn.close()
+
+# Sevkiyat ekleme endpoint'i (güncellenmiş)
+@app.route('/api/sevkiyat', methods=['POST'])
+def add_sevkiyat():
+    data = request.get_json()
+    istenen_kutu = int(data.get('kutu', 0))
+    istenen_kg = float(data.get('kg', 0))
+    alan = data.get('alan', '').strip().upper()
+    tarih = data.get('tarih', datetime.now().strftime('%Y-%m-%d'))
+    
+    if not alan:
+        return jsonify({'message': 'Alan bilgisi gerekli.'}), 400
+    
+    if istenen_kutu <= 0 or istenen_kg <= 0:
+        return jsonify({'message': 'Kutu ve KG değerleri 0\'dan büyük olmalı.'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        alanlar = {}
+        
+        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla
+        cursor.execute("SELECT id, alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        scv_rows = cursor.fetchall()
+        
+        for row in scv_rows:
+            row_alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
+            row_alan = row_alan.strip().upper()
+            
+            # Alan adını normalize et
+            if 'JTI' in row_alan and 'SCV' in row_alan:
+                alan_key = 'JTI SCV'
+            elif 'PMI' in row_alan and 'SCV' in row_alan:
+                alan_key = 'PMI SCV'
+            elif 'PMI' in row_alan and 'TOPPING' in row_alan:
+                alan_key = 'PMI TOPPING'
+            else:
+                alan_key = row_alan
+            
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            
+            try:
+                kutular_array = json.loads(kutular_json) if kutular_json else []
+                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
+            except Exception:
+                kutu_sayisi = 0
+            
+            if alan_key not in alanlar:
+                alanlar[alan_key] = {'kutu': 0, 'kg': 0, 'scv_rows': []}
+            
+            alanlar[alan_key]['kutu'] += kutu_sayisi
+            alanlar[alan_key]['kg'] += toplam_kg
+            alanlar[alan_key]['scv_rows'].append({
+                'id': row['id'] if isinstance(row, dict) else getattr(row, 'id'),
+                'kutular': kutular_array,
+                'kg': toplam_kg,
+                'original_alan': row_alan  # Orijinal alan adını sakla güncelleme için
+            })
+        
+        # İzmir kutulama verilerini al
+        cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
+        izmir_rows = cursor.fetchall()
+        
+        izmir_kutu = 0
+        izmir_kg = 0
+        izmir_data = []
+        
+        for row in izmir_rows:
+            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            try:
+                kutular = json.loads(kutular_json) if kutular_json else []
+                row_kutu = len([k for k in kutular if k and k > 0])
+                izmir_kutu += row_kutu
+            except Exception:
+                kutular = []
+                row_kutu = 0
+            
+            row_kg = row['toplam_kuru_tutun'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_tutun', 0) or 0
+            izmir_kg += row_kg
+            
+            izmir_data.append({
+                'id': row['id'] if isinstance(row, dict) else getattr(row, 'id'),
+                'kutular': kutular,
+                'kg': row_kg
+            })
+        
+        alanlar['İZMİR'] = {'kutu': izmir_kutu, 'kg': izmir_kg, 'izmir_rows': izmir_data}
+        
+        # Alan stokunu kontrol et
+        if alan not in alanlar:
+            return jsonify({'message': f'Belirtilen alan bulunamadı: {alan}'}), 400
+        
+        stok = alanlar[alan]
+        
+        if istenen_kutu > stok['kutu']:
+            return jsonify({
+                'message': f'{alan} alanında yeterli kutu stoku yok! Mevcut: {stok["kutu"]} kutu, İstenen: {istenen_kutu} kutu'
+            }), 400
+        
+        if istenen_kg > stok['kg']:
+            return jsonify({
+                'message': f'{alan} alanında yeterli KG stoku yok! Mevcut: {stok["kg"]:.2f} KG, İstenen: {istenen_kg} KG'
+            }), 400
+        
+        # Stoktan düşme işlemi
+        kalan_kutu = istenen_kutu
+        kalan_kg = istenen_kg
+        
+        if alan == 'İZMİR':
+            # İzmir için stok düşme
+            for izmir_row in alanlar['İZMİR']['izmir_rows']:
+                if kalan_kutu <= 0 and kalan_kg <= 0:
+                    break
+                
+                kutular = izmir_row['kutular']
+                row_kutu = len([k for k in kutular if k and k > 0])
+                row_kg = izmir_row['kg']
+                
+                if row_kutu > 0 and row_kg > 0:
+                    # Bu satırdan ne kadar düşeceğimizi hesapla
+                    dusulecek_kutu = min(kalan_kutu, row_kutu)
+                    kutu_orani = dusulecek_kutu / row_kutu
+                    dusulecek_kg = min(kalan_kg, row_kg * kutu_orani)
+                    
+                    # Kutuları güncelle
+                    yeni_kutular = []
+                    dusurulmus_kutu = 0
+                    for kutu in kutular:
+                        if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
+                            dusurulmus_kutu += 1
+                        else:
+                            yeni_kutular.append(kutu)
+                    
+                    # Veritabanını güncelle
+                    yeni_kg = max(0, row_kg - dusulecek_kg)
+                    cursor.execute(
+                        "UPDATE izmir_kutulama SET kutular = ?, toplam_kuru_tutun = ? WHERE id = ?",
+                        (json.dumps(yeni_kutular), yeni_kg, izmir_row['id'])
+                    )
+                    
+                    kalan_kutu -= dusulecek_kutu
+                    kalan_kg -= dusulecek_kg
+        
+        else:
+            # SCV alanları için stok düşme (alan bazında ayrı ayrı)
+            if alan in alanlar and 'scv_rows' in alanlar[alan]:
+                for scv_row in alanlar[alan]['scv_rows']:
+                    if kalan_kutu <= 0 and kalan_kg <= 0:
+                        break
+                    
+                    kutular = scv_row['kutular']
+                    row_kutu = len([k for k in kutular if k and k > 0])
+                    row_kg = scv_row['kg']
+                    
+                    if row_kutu > 0 and row_kg > 0:
+                        # Bu satırdan ne kadar düşeceğimizi hesapla
+                        dusulecek_kutu = min(kalan_kutu, row_kutu)
+                        kutu_orani = dusulecek_kutu / row_kutu
+                        dusulecek_kg = min(kalan_kg, row_kg * kutu_orani)
+                        
+                        # Kutuları güncelle
+                        yeni_kutular = []
+                        dusurulmus_kutu = 0
+                        for kutu in kutular:
+                            if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
+                                dusurulmus_kutu += 1
+                            else:
+                                yeni_kutular.append(kutu)
+                        
+                        # Veritabanını güncelle
+                        yeni_kg = max(0, row_kg - dusulecek_kg)
+                        cursor.execute(
+                            "UPDATE scv_kutulama SET kutular = ?, toplam_kuru_kg = ? WHERE id = ?",
+                            (json.dumps(yeni_kutular), yeni_kg, scv_row['id'])
+                        )
+                        
+                        kalan_kutu -= dusulecek_kutu
+                        kalan_kg -= dusulecek_kg
+        
+        # Sevkiyat kaydını ekle
+        cursor.execute(
+            "INSERT INTO sevkiyat (tarih, alan, kutu, kg, created_at) VALUES (?, ?, ?, ?, ?)",
+            (tarih, alan, istenen_kutu, istenen_kg, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        
+        conn.commit()
+        return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
+        
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+# Sevkiyat listesini getiren endpoint
+@app.route('/api/sevkiyat', methods=['GET'])
+def get_sevkiyat():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sevkiyat ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        
+        sevkiyatlar = []
+        for row in rows:
+            sevkiyat = {
+                'id': row['id'] if isinstance(row, dict) else getattr(row, 'id'),
+                'tarih': row['tarih'] if isinstance(row, dict) else getattr(row, 'tarih'),
+                'alan': row['alan'] if isinstance(row, dict) else getattr(row, 'alan', ''),
+                'kutuAdedi': row['kutu'] if isinstance(row, dict) else getattr(row, 'kutu'),
+                'toplamKg': row['kg'] if isinstance(row, dict) else getattr(row, 'kg'),
+                'kayitTarihi': row['created_at'] if isinstance(row, dict) else getattr(row, 'created_at')
+            }
+            sevkiyatlar.append(sevkiyat)
+        
+        return jsonify(sevkiyatlar), 200
+        
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        conn.close()
+
+# Sevkiyat tablosunu güncelle
+def update_sevkiyat_table():
+    conn = get_db_connection()
+    if not conn:
+        return False
+    
+    try:
+        cursor = conn.cursor()
+        # Alan sütunu yoksa ekle
+        cursor.execute("PRAGMA table_info(sevkiyat)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'alan' not in columns:
+            cursor.execute("ALTER TABLE sevkiyat ADD COLUMN alan TEXT")
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        print(f"Tablo güncelleme hatası: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+
+
+
+
+
+
 
 @app.route('/api/genel_stok', methods=['GET'])
 def get_genel_stok():
@@ -1970,18 +2239,20 @@ def get_genel_stok():
         # === 2. İZMİR BÖLÜMÜ ===
         
         # 2.1 İzmir Kırım
-        # 2.1 İzmir Kırım (Sadece ağırlık toplamı)
         cursor.execute("""
             SELECT 
-                COALESCE(SUM(ta.agirlik), 0) as kg
+                COALESCE(SUM(ta.agirlik), 0) as kg, 
+                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
             FROM traktor_gelis_izmir_kirim t
             LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
+            LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
             WHERE ta.agirlik > 0
         """)
-        izmir_kirim_kg = cursor.fetchone()[0]
-        result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim_kg)
-        result['toplamlar']['IZMIR']['kirim_bohca'] = 0  # Bohça bilgisi istemiyorsanız 0 olarak ayarlayın
-                # 2.2 İzmir Dizim
+        izmir_kirim = cursor.fetchone()
+        result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim[0])
+        result['toplamlar']['IZMIR']['kirim_bohca'] = int(izmir_kirim[1])
+
+        # 2.2 İzmir Dizim
         cursor.execute("""
             SELECT 
                 COALESCE(SUM(a.agirlik), 0) as kg, 
@@ -2048,6 +2319,7 @@ def get_genel_stok():
     finally:
         if conn:
             conn.close()
+            
 @app.route('/api/sevkiyat/reset', methods=['POST'])
 def reset_sevkiyat():
     conn = get_db_connection()
