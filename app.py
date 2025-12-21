@@ -1910,14 +1910,29 @@ def add_sevkiyat():
     data = request.get_json()
     istenen_kutu = int(data.get('kutu', 0))
     istenen_kg = float(data.get('kg', 0))
-    alan = data.get('alan', '').strip().upper()
+    alan_input = data.get('alan', '').strip()
     tarih = data.get('tarih', datetime.now().strftime('%Y-%m-%d'))
     
-    if not alan:
+    if not alan_input:
         return jsonify({'message': 'Alan bilgisi gerekli.'}), 400
     
     if istenen_kutu <= 0 or istenen_kg <= 0:
         return jsonify({'message': 'Kutu ve KG değerleri 0\'dan büyük olmalı.'}), 400
+    
+    # Frontend'den gelen alan adını normalize et (küçük harf, tire -> büyük harf, boşluk)
+    alan_mapping = {
+        'pmi-topping': 'PMI TOPPING',
+        'pmi-scv': 'PMI SCV',
+        'jti-scv': 'JTI SCV',
+        'izmir': 'İZMİR',
+        'PMI-TOPPING': 'PMI TOPPING',
+        'PMI-SCV': 'PMI SCV',
+        'JTI-SCV': 'JTI SCV',
+        'İZMİR': 'İZMİR'
+    }
+    
+    # Önce mapping'den bak, yoksa büyük harfe çevir
+    alan = alan_mapping.get(alan_input.lower(), alan_input.upper().replace('-', ' '))
     
     conn = get_db_connection()
     if not conn:
@@ -1997,7 +2012,7 @@ def add_sevkiyat():
         
         # Alan stokunu kontrol et
         if alan not in alanlar:
-            return jsonify({'message': f'Belirtilen alan bulunamadı: {alan}'}), 400
+            return jsonify({'message': f'Belirtilen alan bulunamadı: {alan} (Gelen: {alan_input})'}), 400
         
         stok = alanlar[alan]
         
