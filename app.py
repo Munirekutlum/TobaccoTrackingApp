@@ -3930,20 +3930,40 @@ def admin_login():
         regions = [row['region_code'] for row in cursor.fetchall()]
         
         # user_type varsa kullan, yoksa varsayılan olarak 'admin'
-        user_type = 'admin'
+        user_type = None
         if has_user_type:
             try:
                 user_type_value = user.get('user_type')
-                if user_type_value:
+                if user_type_value is not None:
                     user_type = str(user_type_value).strip().lower()
+                    # Boş string kontrolü
+                    if not user_type:
+                        user_type = 'admin'
                 else:
-                    user_type = 'admin'
+                    # NULL değer - veritabanından tekrar kontrol et
+                    cursor.execute("SELECT user_type FROM admin_users WHERE id = ?", (user['id'],))
+                    db_user_type = cursor.fetchone()
+                    if db_user_type and db_user_type.get('user_type'):
+                        user_type = str(db_user_type['user_type']).strip().lower()
+                    else:
+                        user_type = 'admin'
             except Exception as e:
                 print(f"user_type okuma hatası: {e}")
+                import traceback
+                print(traceback.format_exc())
                 user_type = 'admin'
+        else:
+            # user_type kolonu yok - varsayılan olarak admin
+            user_type = 'admin'
         
-        # Debug log
-        print(f"Login - Username: {username}, User Type: {user_type}, Regions: {regions}")
+        # Debug log - detaylı
+        print(f"=== LOGIN DEBUG ===")
+        print(f"Username: {username}")
+        print(f"User ID: {user['id']}")
+        print(f"Has user_type column: {has_user_type}")
+        print(f"User Type from DB: {user_type}")
+        print(f"Regions: {regions}")
+        print(f"===================")
         
         return jsonify({
             'message': 'Giriş başarılı.',
@@ -3953,7 +3973,7 @@ def admin_login():
                 'name': user['name'],
                 'surname': user['surname'],
                 'is_super_admin': bool(user['is_super_admin']),
-                'user_type': user_type,
+                'user_type': user_type,  # Mutlaka bir değer döndür
                 'regions': regions
             }
         }), 200
