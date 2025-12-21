@@ -513,6 +513,23 @@ def initialize_db():
                 FOREIGN KEY (sergi_id) REFERENCES sergi_kiriz(id) ON DELETE CASCADE,
                 FOREIGN KEY (traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE,
                 UNIQUE (sergi_id, traktor_gelis_izmir_kirim_id)
+            );''',
+            'admin_users': '''CREATE TABLE IF NOT EXISTS admin_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                name TEXT,
+                surname TEXT,
+                is_super_admin INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );''',
+            'user_regions': '''CREATE TABLE IF NOT EXISTS user_regions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_user_id INTEGER NOT NULL,
+                region_code TEXT NOT NULL,
+                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
+                UNIQUE(admin_user_id, region_code)
             );'''
 
         }
@@ -540,6 +557,23 @@ def initialize_db():
         
         if not created_tables and not existing_tables:
             print("⚠️  Hiç tablo bulunamadı veya oluşturulamadı.")
+        
+        # Varsayılan admin kullanıcısını oluştur (eğer yoksa)
+        try:
+            cursor.execute("SELECT COUNT(*) FROM admin_users WHERE username = 'admin'")
+            admin_exists = cursor.fetchone()[0] > 0
+            if not admin_exists:
+                # Basit şifre hash (production'da bcrypt kullanılmalı)
+                import hashlib
+                default_password = hashlib.md5('admin123'.encode()).hexdigest()
+                cursor.execute("""
+                    INSERT INTO admin_users (username, password, name, surname, is_super_admin)
+                    VALUES (?, ?, ?, ?, ?)
+                """, ('admin', default_password, 'Admin', 'User', 1))
+                conn.commit()
+                print("✅ Varsayılan admin kullanıcısı oluşturuldu (username: admin, password: admin123)")
+        except Exception as e:
+            print(f"⚠️  Admin kullanıcısı oluşturulurken hata: {e}")
         
         return True
     except Exception as e:
@@ -3803,6 +3837,255 @@ def get_pmi_topping_kutulama_summary():
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
         if conn: conn.close()
+
+# --- Admin Authentication ve Kullanıcı Yönetimi Endpoint'leri ---
+#-----------------------------------------------------------------------------------------------------
+import hashlib
+
+def hash_password(password):
+    """Şifreyi hash'le (basit MD5, production'da bcrypt kullanılmalı)"""
+    return hashlib.md5(password.encode()).hexdigest()
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    """Admin girişi"""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'message': 'Kullanıcı adı ve şifre gerekli.'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        hashed_password = hash_password(password)
+        cursor.execute("""
+            SELECT id, username, name, surname, is_super_admin 
+            FROM admin_users 
+            WHERE username = ? AND password = ?
+        """, (username, hashed_password))
+        
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({'message': 'Kullanıcı adı veya şifre hatalı.'}), 401
+        
+        # Kullanıcının erişebileceği bölgeleri al
+        cursor.execute("""
+            SELECT region_code 
+            FROM user_regions 
+            WHERE admin_user_id = ?
+        """, (user['id'],))
+        regions = [row['region_code'] for row in cursor.fetchall()]
+        
+        return jsonify({
+            'message': 'Giriş başarılı.',
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'name': user['name'],
+                'surname': user['surname'],
+                'is_super_admin': bool(user['is_super_admin']),
+                'regions': regions
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/users', methods=['GET'])
+def get_admin_users():
+    """Tüm admin kullanıcılarını listele"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, name, surname, is_super_admin, created_at
+            FROM admin_users
+            ORDER BY created_at DESC
+        """)
+        
+        users = []
+        for row in cursor.fetchall():
+            user_dict = dict(row)
+            # Her kullanıcının bölgelerini al
+            cursor.execute("""
+                SELECT region_code 
+                FROM user_regions 
+                WHERE admin_user_id = ?
+            """, (user_dict['id'],))
+            user_dict['regions'] = [r['region_code'] for r in cursor.fetchall()]
+            user_dict['is_super_admin'] = bool(user_dict['is_super_admin'])
+            users.append(user_dict)
+        
+        return jsonify(users), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/users', methods=['POST'])
+def create_admin_user():
+    """Yeni admin kullanıcısı oluştur"""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    name = data.get('name', '')
+    surname = data.get('surname', '')
+    is_super_admin = data.get('is_super_admin', False)
+    regions = data.get('regions', [])
+    
+    if not username or not password:
+        return jsonify({'message': 'Kullanıcı adı ve şifre gerekli.'}), 400
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        # Kullanıcı adı kontrolü
+        cursor.execute("SELECT id FROM admin_users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            return jsonify({'message': 'Bu kullanıcı adı zaten kullanılıyor.'}), 409
+        
+        # Kullanıcıyı oluştur
+        hashed_password = hash_password(password)
+        cursor.execute("""
+            INSERT INTO admin_users (username, password, name, surname, is_super_admin)
+            VALUES (?, ?, ?, ?, ?)
+        """, (username, hashed_password, name, surname, 1 if is_super_admin else 0))
+        
+        user_id = cursor.lastrowid
+        
+        # Super admin ise tüm bölgelere erişim ver
+        if is_super_admin:
+            all_regions = ['FCV', 'SCV', 'IZMIR', 'N-RUSTICA', 'BASMA', 'PRILEP', 'KATERINI']
+            for region in all_regions:
+                cursor.execute("""
+                    INSERT INTO user_regions (admin_user_id, region_code)
+                    VALUES (?, ?)
+                """, (user_id, region))
+        else:
+            # Belirtilen bölgelere erişim ver
+            for region in regions:
+                cursor.execute("""
+                    INSERT INTO user_regions (admin_user_id, region_code)
+                    VALUES (?, ?)
+                """, (user_id, region))
+        
+        conn.commit()
+        return jsonify({'message': 'Kullanıcı başarıyla oluşturuldu.', 'user_id': user_id}), 201
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/users/<int:user_id>', methods=['PUT'])
+def update_admin_user(user_id):
+    """Admin kullanıcısını güncelle"""
+    data = request.get_json()
+    name = data.get('name')
+    surname = data.get('surname')
+    password = data.get('password')
+    is_super_admin = data.get('is_super_admin', False)
+    regions = data.get('regions', [])
+    
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Kullanıcıyı güncelle
+        if password:
+            hashed_password = hash_password(password)
+            cursor.execute("""
+                UPDATE admin_users 
+                SET name = ?, surname = ?, password = ?, is_super_admin = ?
+                WHERE id = ?
+            """, (name, surname, hashed_password, 1 if is_super_admin else 0, user_id))
+        else:
+            cursor.execute("""
+                UPDATE admin_users 
+                SET name = ?, surname = ?, is_super_admin = ?
+                WHERE id = ?
+            """, (name, surname, 1 if is_super_admin else 0, user_id))
+        
+        # Mevcut bölge yetkilerini sil
+        cursor.execute("DELETE FROM user_regions WHERE admin_user_id = ?", (user_id,))
+        
+        # Yeni bölge yetkilerini ekle
+        if is_super_admin:
+            all_regions = ['FCV', 'SCV', 'IZMIR', 'N-RUSTICA', 'BASMA', 'PRILEP', 'KATERINI']
+            for region in all_regions:
+                cursor.execute("""
+                    INSERT INTO user_regions (admin_user_id, region_code)
+                    VALUES (?, ?)
+                """, (user_id, region))
+        else:
+            for region in regions:
+                cursor.execute("""
+                    INSERT INTO user_regions (admin_user_id, region_code)
+                    VALUES (?, ?)
+                """, (user_id, region))
+        
+        conn.commit()
+        return jsonify({'message': 'Kullanıcı başarıyla güncellendi.'}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+def delete_admin_user(user_id):
+    """Admin kullanıcısını sil"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM admin_users WHERE id = ?", (user_id,))
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return jsonify({'message': 'Kullanıcı bulunamadı.'}), 404
+        
+        return jsonify({'message': 'Kullanıcı başarıyla silindi.'}), 200
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/regions', methods=['GET'])
+def get_all_regions():
+    """Tüm bölgeleri listele"""
+    regions = [
+        {'code': 'FCV', 'name': 'FCV'},
+        {'code': 'SCV', 'name': 'SCV'},
+        {'code': 'IZMIR', 'name': 'İzmir'},
+        {'code': 'N-RUSTICA', 'name': 'N-Rustica'},
+        {'code': 'BASMA', 'name': 'Basma'},
+        {'code': 'PRILEP', 'name': 'Prilep'},
+        {'code': 'KATERINI', 'name': 'Katerini'}
+    ]
+    return jsonify(regions), 200
 
 if __name__ == '__main__':
     print(" Veritabanı bağlantısı kontrol ediliyor...")
