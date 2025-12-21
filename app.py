@@ -3969,7 +3969,7 @@ def create_admin_user():
         
         # Super admin ise tüm bölgelere erişim ver
         if is_super_admin:
-            all_regions = ['FCV', 'SCV', 'IZMIR', 'N-RUSTICA', 'BASMA', 'PRILEP', 'KATERINI']
+            all_regions = ['ADY_DOGU', 'ADY_BATI', 'MAN', 'MAR']
             for region in all_regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
@@ -4029,7 +4029,7 @@ def update_admin_user(user_id):
         
         # Yeni bölge yetkilerini ekle
         if is_super_admin:
-            all_regions = ['FCV', 'SCV', 'IZMIR', 'N-RUSTICA', 'BASMA', 'PRILEP', 'KATERINI']
+            all_regions = ['ADY_DOGU', 'ADY_BATI', 'MAN', 'MAR']
             for region in all_regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
@@ -4077,13 +4077,10 @@ def delete_admin_user(user_id):
 def get_all_regions():
     """Tüm bölgeleri listele"""
     regions = [
-        {'code': 'FCV', 'name': 'FCV'},
-        {'code': 'SCV', 'name': 'SCV'},
-        {'code': 'IZMIR', 'name': 'İzmir'},
-        {'code': 'N-RUSTICA', 'name': 'N-Rustica'},
-        {'code': 'BASMA', 'name': 'Basma'},
-        {'code': 'PRILEP', 'name': 'Prilep'},
-        {'code': 'KATERINI', 'name': 'Katerini'}
+        {'code': 'ADY_DOGU', 'name': 'Adıyaman Doğu'},
+        {'code': 'ADY_BATI', 'name': 'Adıyaman Batı'},
+        {'code': 'MAN', 'name': 'Manisa'},
+        {'code': 'MAR', 'name': 'Mardin'}
     ]
     return jsonify(regions), 200
 
