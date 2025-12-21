@@ -3933,9 +3933,17 @@ def admin_login():
         user_type = 'admin'
         if has_user_type:
             try:
-                user_type = user.get('user_type') or 'admin'
-            except:
+                user_type_value = user.get('user_type')
+                if user_type_value:
+                    user_type = str(user_type_value).strip().lower()
+                else:
+                    user_type = 'admin'
+            except Exception as e:
+                print(f"user_type okuma hatası: {e}")
                 user_type = 'admin'
+        
+        # Debug log
+        print(f"Login - Username: {username}, User Type: {user_type}, Regions: {regions}")
         
         return jsonify({
             'message': 'Giriş başarılı.',
