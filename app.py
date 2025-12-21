@@ -562,13 +562,17 @@ def initialize_db():
         # admin_users tablosuna user_type kolonu ekle (eğer yoksa)
         try:
             cursor.execute("PRAGMA table_info(admin_users)")
-            columns = [column[1] for column in cursor.fetchall()]
+            columns_info = cursor.fetchall()
+            # SQLite PRAGMA table_info döner: (cid, name, type, notnull, default_value, pk)
+            columns = [col[1] for col in columns_info]  # İkinci eleman kolon adı
             if 'user_type' not in columns:
                 cursor.execute("ALTER TABLE admin_users ADD COLUMN user_type TEXT DEFAULT 'admin'")
                 conn.commit()
                 print("✅ admin_users tablosuna user_type kolonu eklendi")
         except Exception as e:
             print(f"⚠️  user_type kolonu eklenirken hata: {e}")
+            import traceback
+            print(traceback.format_exc())
         
         # Varsayılan admin kullanıcısını oluştur (eğer yoksa)
         try:
@@ -3877,19 +3881,34 @@ def admin_login():
         hashed_password = hash_password(password)
         
         # Önce user_type kolonunun var olup olmadığını kontrol et
+        has_user_type = False
         try:
             cursor.execute("PRAGMA table_info(admin_users)")
-            columns = [column[1] for column in cursor.fetchall()]
+            columns_info = cursor.fetchall()
+            # SQLite PRAGMA table_info döner: (cid, name, type, notnull, default_value, pk)
+            columns = [col[1] for col in columns_info]  # İkinci eleman kolon adı
             has_user_type = 'user_type' in columns
-        except:
+        except Exception as e:
+            print(f"Kolon kontrolü hatası: {e}")
             has_user_type = False
         
+        # Kullanıcıyı sorgula - user_type kolonu varsa dahil et
         if has_user_type:
-            cursor.execute("""
-                SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
-                FROM admin_users 
-                WHERE username = ? AND password = ?
-            """, (username, hashed_password))
+            try:
+                cursor.execute("""
+                    SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
+                    FROM admin_users 
+                    WHERE username = ? AND password = ?
+                """, (username, hashed_password))
+            except Exception as e:
+                # user_type kolonu varsa ama sorgu başarısız olursa, kolonsuz dene
+                print(f"user_type ile sorgu hatası: {e}")
+                cursor.execute("""
+                    SELECT id, username, name, surname, is_super_admin
+                    FROM admin_users 
+                    WHERE username = ? AND password = ?
+                """, (username, hashed_password))
+                has_user_type = False
         else:
             # user_type kolonu yoksa, sadece diğer kolonları seç
             cursor.execute("""
@@ -3911,7 +3930,12 @@ def admin_login():
         regions = [row['region_code'] for row in cursor.fetchall()]
         
         # user_type varsa kullan, yoksa varsayılan olarak 'admin'
-        user_type = user.get('user_type') if has_user_type else 'admin'
+        user_type = 'admin'
+        if has_user_type:
+            try:
+                user_type = user.get('user_type') or 'admin'
+            except:
+                user_type = 'admin'
         
         return jsonify({
             'message': 'Giriş başarılı.',
@@ -3926,7 +3950,11 @@ def admin_login():
             }
         }), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Admin login hatası: {e}")
+        print(f"Detaylar: {error_details}")
+        return jsonify({'message': f'Giriş sırasında bir hata oluştu: {str(e)}'}), 500
     finally:
         if conn:
             conn.close()
