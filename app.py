@@ -521,6 +521,7 @@ def initialize_db():
                 name TEXT,
                 surname TEXT,
                 is_super_admin INTEGER DEFAULT 0,
+                user_type TEXT DEFAULT 'admin',
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );''',
             'user_regions': '''CREATE TABLE IF NOT EXISTS user_regions (
@@ -567,9 +568,9 @@ def initialize_db():
                 import hashlib
                 default_password = hashlib.md5('admin123'.encode()).hexdigest()
                 cursor.execute("""
-                    INSERT INTO admin_users (username, password, name, surname, is_super_admin)
-                    VALUES (?, ?, ?, ?, ?)
-                """, ('admin', default_password, 'Admin', 'User', 1))
+                    INSERT INTO admin_users (username, password, name, surname, is_super_admin, user_type)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, ('admin', default_password, 'Admin', 'User', 1, 'admin'))
                 conn.commit()
                 print("✅ Varsayılan admin kullanıcısı oluşturuldu (username: admin, password: admin123)")
         except Exception as e:
@@ -3864,7 +3865,7 @@ def admin_login():
         cursor = conn.cursor()
         hashed_password = hash_password(password)
         cursor.execute("""
-            SELECT id, username, name, surname, is_super_admin 
+            SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
             FROM admin_users 
             WHERE username = ? AND password = ?
         """, (username, hashed_password))
@@ -3881,6 +3882,9 @@ def admin_login():
         """, (user['id'],))
         regions = [row['region_code'] for row in cursor.fetchall()]
         
+        # user_type varsa kullan, yoksa varsayılan olarak 'admin'
+        user_type = user.get('user_type') or 'admin'
+        
         return jsonify({
             'message': 'Giriş başarılı.',
             'user': {
@@ -3889,6 +3893,7 @@ def admin_login():
                 'name': user['name'],
                 'surname': user['surname'],
                 'is_super_admin': bool(user['is_super_admin']),
+                'user_type': user_type,
                 'regions': regions
             }
         }), 200
@@ -3908,7 +3913,7 @@ def get_admin_users():
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, username, name, surname, is_super_admin, created_at
+            SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type, created_at
             FROM admin_users
             ORDER BY created_at DESC
         """)
@@ -3924,6 +3929,7 @@ def get_admin_users():
             """, (user_dict['id'],))
             user_dict['regions'] = [r['region_code'] for r in cursor.fetchall()]
             user_dict['is_super_admin'] = bool(user_dict['is_super_admin'])
+            user_dict['user_type'] = user_dict.get('user_type') or 'admin'
             users.append(user_dict)
         
         return jsonify(users), 200
@@ -3942,6 +3948,7 @@ def create_admin_user():
     name = data.get('name', '')
     surname = data.get('surname', '')
     is_super_admin = data.get('is_super_admin', False)
+    user_type = data.get('user_type', 'admin')  # admin, supervisor, bolge_muduru
     regions = data.get('regions', [])
     
     if not username or not password:
@@ -3961,9 +3968,9 @@ def create_admin_user():
         # Kullanıcıyı oluştur
         hashed_password = hash_password(password)
         cursor.execute("""
-            INSERT INTO admin_users (username, password, name, surname, is_super_admin)
-            VALUES (?, ?, ?, ?, ?)
-        """, (username, hashed_password, name, surname, 1 if is_super_admin else 0))
+            INSERT INTO admin_users (username, password, name, surname, is_super_admin, user_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (username, hashed_password, name, surname, 1 if is_super_admin else 0, user_type))
         
         user_id = cursor.lastrowid
         
@@ -4000,6 +4007,7 @@ def update_admin_user(user_id):
     surname = data.get('surname')
     password = data.get('password')
     is_super_admin = data.get('is_super_admin', False)
+    user_type = data.get('user_type', 'admin')
     regions = data.get('regions', [])
     
     conn = get_db_connection()
@@ -4014,15 +4022,15 @@ def update_admin_user(user_id):
             hashed_password = hash_password(password)
             cursor.execute("""
                 UPDATE admin_users 
-                SET name = ?, surname = ?, password = ?, is_super_admin = ?
+                SET name = ?, surname = ?, password = ?, is_super_admin = ?, user_type = ?
                 WHERE id = ?
-            """, (name, surname, hashed_password, 1 if is_super_admin else 0, user_id))
+            """, (name, surname, hashed_password, 1 if is_super_admin else 0, user_type, user_id))
         else:
             cursor.execute("""
                 UPDATE admin_users 
-                SET name = ?, surname = ?, is_super_admin = ?
+                SET name = ?, surname = ?, is_super_admin = ?, user_type = ?
                 WHERE id = ?
-            """, (name, surname, 1 if is_super_admin else 0, user_id))
+            """, (name, surname, 1 if is_super_admin else 0, user_type, user_id))
         
         # Mevcut bölge yetkilerini sil
         cursor.execute("DELETE FROM user_regions WHERE admin_user_id = ?", (user_id,))
