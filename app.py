@@ -559,6 +559,17 @@ def initialize_db():
         if not created_tables and not existing_tables:
             print("⚠️  Hiç tablo bulunamadı veya oluşturulamadı.")
         
+        # admin_users tablosuna user_type kolonu ekle (eğer yoksa)
+        try:
+            cursor.execute("PRAGMA table_info(admin_users)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'user_type' not in columns:
+                cursor.execute("ALTER TABLE admin_users ADD COLUMN user_type TEXT DEFAULT 'admin'")
+                conn.commit()
+                print("✅ admin_users tablosuna user_type kolonu eklendi")
+        except Exception as e:
+            print(f"⚠️  user_type kolonu eklenirken hata: {e}")
+        
         # Varsayılan admin kullanıcısını oluştur (eğer yoksa)
         try:
             cursor.execute("SELECT COUNT(*) FROM admin_users WHERE username = 'admin'")
@@ -3864,11 +3875,28 @@ def admin_login():
     try:
         cursor = conn.cursor()
         hashed_password = hash_password(password)
-        cursor.execute("""
-            SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
-            FROM admin_users 
-            WHERE username = ? AND password = ?
-        """, (username, hashed_password))
+        
+        # Önce user_type kolonunun var olup olmadığını kontrol et
+        try:
+            cursor.execute("PRAGMA table_info(admin_users)")
+            columns = [column[1] for column in cursor.fetchall()]
+            has_user_type = 'user_type' in columns
+        except:
+            has_user_type = False
+        
+        if has_user_type:
+            cursor.execute("""
+                SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
+                FROM admin_users 
+                WHERE username = ? AND password = ?
+            """, (username, hashed_password))
+        else:
+            # user_type kolonu yoksa, sadece diğer kolonları seç
+            cursor.execute("""
+                SELECT id, username, name, surname, is_super_admin
+                FROM admin_users 
+                WHERE username = ? AND password = ?
+            """, (username, hashed_password))
         
         user = cursor.fetchone()
         if not user:
@@ -3883,7 +3911,7 @@ def admin_login():
         regions = [row['region_code'] for row in cursor.fetchall()]
         
         # user_type varsa kullan, yoksa varsayılan olarak 'admin'
-        user_type = user.get('user_type') or 'admin'
+        user_type = user.get('user_type') if has_user_type else 'admin'
         
         return jsonify({
             'message': 'Giriş başarılı.',
