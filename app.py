@@ -1,20 +1,22 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import pandas as pd
 from datetime import datetime
 import json
 import os
+from urllib.parse import urlparse
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers="*", supports_credentials=True)
 
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'veritabani.sqlite3')
+# PostgreSQL veritabanı bağlantı URL'i
+DATABASE_URL = "postgresql://bag_tech_masraf_user:bxJYj5rIJpH8PEvgfBtfuwr3LXVd5ukC@dpg-d54dh8ruibrs738dlstg-a.frankfurt-postgres.render.com/bag_tech_masraf"
 
 def get_db_connection():
     try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = psycopg2.connect(DATABASE_URL)
         return conn
     except Exception as e:
         print(f"Veritabanı bağlantı hatası: {e}")
@@ -29,15 +31,15 @@ def test_connection():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT @@VERSION")
+        cursor.execute("SELECT version()")
         version = cursor.fetchone()[0]
-        print(f"SQL Server Version: {version}")
+        print(f"PostgreSQL Version: {version}")
         
-        cursor.execute("SELECT DB_NAME()")
+        cursor.execute("SELECT current_database()")
         db_name = cursor.fetchone()[0]
         print(f"Current Database: {db_name}")
         
-        cursor.execute("SELECT SYSTEM_USER")
+        cursor.execute("SELECT current_user")
         user = cursor.fetchone()[0]
         print(f"Connected as: {user}")
         
@@ -50,8 +52,14 @@ def test_connection():
 
 def table_exists(cursor, table_name):
     """Tablonun var olup olmadığını kontrol eder"""
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
-    return cursor.fetchone() is not None
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = %s
+        )
+    """, (table_name,))
+    return cursor.fetchone()[0]
 
 def count_records(cursor, table_name):
     """Tablodaki kayıt sayısını döndürür"""
@@ -69,23 +77,23 @@ def initialize_db():
 
     try:
         cursor = conn.cursor()
-        cursor.execute('PRAGMA foreign_keys = ON;')
+        # PostgreSQL'de foreign keys varsayılan olarak aktif
         
         # Tablo tanımları
         tables = {
             'users': '''CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
                 name TEXT,
                 surname TEXT
             );''',
             'fcv_bakim': '''CREATE TABLE IF NOT EXISTS fcv_bakim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'fcv_genel': '''CREATE TABLE IF NOT EXISTS fcv_genel (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 firinNo INTEGER,
                 tarla TEXT,
                 turSayisi INTEGER,
@@ -96,59 +104,59 @@ def initialize_db():
                 ortalama REAL,
                 koliSayisi INTEGER,
                 yakitToplam REAL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'fcv_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS fcv_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 userId INTEGER NOT NULL,
                 tarih TEXT NOT NULL,
                 bocaSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(userId, tarih),
                 FOREIGN KEY(userId) REFERENCES users(id) ON DELETE CASCADE
             );''',
             'fcv_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS fcv_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 gunlukId INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(gunlukId) REFERENCES fcv_kirim_gunluk(id) ON DELETE CASCADE
             );''',
             'fcv_rask_dolum': '''CREATE TABLE IF NOT EXISTS fcv_rask_dolum (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'izmir_dizim': '''CREATE TABLE IF NOT EXISTS izmir_dizim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'izmir_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS izmir_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'izmir_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS izmir_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'izmir_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS izmir_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES izmir_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'izmir_kutulama': '''CREATE TABLE IF NOT EXISTS izmir_kutulama (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
                 sergi_numaralari TEXT NOT NULL, -- JSON string
@@ -160,138 +168,138 @@ def initialize_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'jti_scv_kirim': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'jti_scv_kirim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
                 UNIQUE(dayibasi, tarih)
             );''',
             'jti_scv_kirim_gunluk': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 bohcaSayisi INTEGER,
                 agirlik_id INTEGER,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id)
             );''',
             'jti_scv_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS jti_scv_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kirim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'jti_scv_dizim': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'jti_scv_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'jti_scv_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'jti_scv_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'jti_scv_kutulama': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'jti_scv_kutulama_dayibasi_table': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'jti_scv_kutulama_kuru_kg': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_kuru_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'jti_scv_kutulama_sera_yas_kg': '''CREATE TABLE IF NOT EXISTS jti_scv_kutulama_sera_yas_kg (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 value REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES jti_scv_kutulama_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'pmi_scv_dizim': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'pmi_scv_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'pmi_scv_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'pmi_scv_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
 
             
             'pmi_topping_dizim': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 placeholder_col TEXT
             );''',
             'pmi_topping_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'pmi_topping_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'pmi_topping_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'scv_sera': '''CREATE TABLE IF NOT EXISTS scv_sera (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 sera_yeri TEXT,
                 alan TEXT,
                 sera_no TEXT,
@@ -304,16 +312,16 @@ def initialize_db():
                 dizi_kg6 REAL,
                 bosaltma_tarihi TEXT,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'scv_sera_yerleri': '''CREATE TABLE IF NOT EXISTS scv_sera_yerleri (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 sera_yeri TEXT NOT NULL UNIQUE,
                 toplam_sera_sayisi INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'scv_kutulama': '''CREATE TABLE IF NOT EXISTS scv_kutulama (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
                 sera_yeri TEXT NOT NULL,
@@ -325,210 +333,210 @@ def initialize_db():
                 alan TEXT NOT NULL,
                 yazici_adi TEXT,
                 sera_bosaltildi TEXT DEFAULT 'hayir',
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'pmi_scv_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'pmi_scv_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'pmi_scv_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_scv_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
 
             'pmi_topping_dizim_dayibasi_table': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_dayibasi_table (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 dayibasi TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'pmi_topping_dizim_gunluk': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_gunluk (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 diziAdedi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'pmi_topping_dizim_agirlik': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 dayibasi_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(dayibasi_id) REFERENCES pmi_topping_dizim_dayibasi_table(id) ON DELETE CASCADE
             );''',
             'sevkiyat': '''CREATE TABLE IF NOT EXISTS sevkiyat (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT,
                 kutu INTEGER,
                 kg REAL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'jti_scv_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS jti_scv_dizim_yaprak (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 agirlik_id INTEGER NOT NULL,
                 yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(agirlik_id) REFERENCES jti_scv_dizim_agirlik(id) ON DELETE CASCADE
             );''',
             'pmi_scv_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS pmi_scv_dizim_yaprak (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 agirlik_id INTEGER NOT NULL,
                 yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(agirlik_id) REFERENCES pmi_scv_dizim_agirlik(id) ON DELETE CASCADE
             );''',
             'pmi_topping_dizim_yaprak': '''CREATE TABLE IF NOT EXISTS pmi_topping_dizim_yaprak (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 agirlik_id INTEGER NOT NULL,
                 yaprakSayisi INTEGER NOT NULL,
                 yazici_adi TEXT,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(agirlik_id) REFERENCES pmi_topping_dizim_agirlik(id) ON DELETE CASCADE
             );''',
             # --- JTI SCV KIRIM yeni sistem için ---
             'traktor_gelis_jti_kirim': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 plaka TEXT NOT NULL,
                 gelis_no INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(tarih, plaka, gelis_no)
             );''',
             'traktor_gelis_jti_kirim_dayibasi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim_dayibasi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_jti_kirim_id INTEGER NOT NULL,
                 dayibasi_adi TEXT NOT NULL,
                 bohca_sayisi INTEGER NOT NULL,
                 FOREIGN KEY(traktor_gelis_jti_kirim_id) REFERENCES traktor_gelis_jti_kirim(id) ON DELETE CASCADE
             );''',
             'traktor_gelis_jti_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS traktor_gelis_jti_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_jti_kirim_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(traktor_gelis_jti_kirim_id) REFERENCES traktor_gelis_jti_kirim(id) ON DELETE CASCADE
             );''',
             # --- PMI SCV KIRIM yeni sistem için ---
             'traktor_gelis_pmi_kirim': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 plaka TEXT NOT NULL,
                 gelis_no INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(tarih, plaka, gelis_no)
             );''',
             'traktor_gelis_pmi_kirim_dayibasi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_kirim_dayibasi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_pmi_kirim_id INTEGER NOT NULL,
                 dayibasi_adi TEXT NOT NULL,
                 bohca_sayisi INTEGER NOT NULL,
                 FOREIGN KEY(traktor_gelis_pmi_kirim_id) REFERENCES traktor_gelis_pmi_kirim(id) ON DELETE CASCADE
             );''',
             'traktor_gelis_pmi_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_pmi_kirim_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(traktor_gelis_pmi_kirim_id) REFERENCES traktor_gelis_pmi_kirim(id) ON DELETE CASCADE
             );''',
             # --- PMI TOPPING KIRIM yeni sistem için ---
             'traktor_gelis_pmi_topping_kirim': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_topping_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 plaka TEXT NOT NULL,
                 gelis_no INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(tarih, plaka, gelis_no)
             );''',
             'traktor_gelis_pmi_topping_kirim_dayibasi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_topping_kirim_dayibasi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_pmi_topping_kirim_id INTEGER NOT NULL,
                 dayibasi_adi TEXT NOT NULL,
                 bohca_sayisi INTEGER NOT NULL,
                 FOREIGN KEY(traktor_gelis_pmi_topping_kirim_id) REFERENCES traktor_gelis_pmi_topping_kirim(id) ON DELETE CASCADE
             );''',
             'traktor_gelis_pmi_topping_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS traktor_gelis_pmi_topping_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_pmi_topping_kirim_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(traktor_gelis_pmi_topping_kirim_id) REFERENCES traktor_gelis_pmi_topping_kirim(id) ON DELETE CASCADE
             );''',
             # --- IZMIR KIRIM yeni sistem için ---
             'traktor_gelis_izmir_kirim': '''CREATE TABLE IF NOT EXISTS traktor_gelis_izmir_kirim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 tarih TEXT NOT NULL,
                 plaka TEXT NOT NULL,
                 gelis_no INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(tarih, plaka, gelis_no)
             );''',
             'traktor_gelis_izmir_kirim_dayibasi': '''CREATE TABLE IF NOT EXISTS traktor_gelis_izmir_kirim_dayibasi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
                 dayibasi_adi TEXT NOT NULL,
                 bohca_sayisi INTEGER NOT NULL,
                 FOREIGN KEY(traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE
             );''',
             'traktor_gelis_izmir_kirim_agirlik': '''CREATE TABLE IF NOT EXISTS traktor_gelis_izmir_kirim_agirlik (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
                 agirlik REAL NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE
             );''',
             'sergi_kiriz': '''CREATE TABLE IF NOT EXISTS sergi_kiriz (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 sergi_no TEXT NOT NULL UNIQUE,
                 toplam_sepet INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
 
             'sergi_sepet_dagitim': '''CREATE TABLE IF NOT EXISTS sergi_sepet_dagitim (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 sergi_id INTEGER NOT NULL,
                 traktor_gelis_izmir_kirim_id INTEGER NOT NULL,
                 sepet_sayisi INTEGER NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
-                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (sergi_id) REFERENCES sergi_kiriz(id) ON DELETE CASCADE,
                 FOREIGN KEY (traktor_gelis_izmir_kirim_id) REFERENCES traktor_gelis_izmir_kirim(id) ON DELETE CASCADE,
                 UNIQUE (sergi_id, traktor_gelis_izmir_kirim_id)
             );''',
             'admin_users': '''CREATE TABLE IF NOT EXISTS admin_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
                 name TEXT,
                 surname TEXT,
                 is_super_admin INTEGER DEFAULT 0,
                 user_type TEXT DEFAULT 'admin',
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );''',
             'user_regions': '''CREATE TABLE IF NOT EXISTS user_regions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 admin_user_id INTEGER NOT NULL,
                 region_code TEXT NOT NULL,
-                created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE CASCADE,
                 UNIQUE(admin_user_id, region_code)
             );'''
@@ -561,10 +569,14 @@ def initialize_db():
         
         # admin_users tablosuna user_type kolonu ekle (eğer yoksa)
         try:
-            cursor.execute("PRAGMA table_info(admin_users)")
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'admin_users'
+            """)
             columns_info = cursor.fetchall()
-            # SQLite PRAGMA table_info döner: (cid, name, type, notnull, default_value, pk)
-            columns = [col[1] for col in columns_info]  # İkinci eleman kolon adı
+            # PostgreSQL information_schema döner: (column_name,)
+            columns = [col[0] for col in columns_info]  # İlk eleman kolon adı
             if 'user_type' not in columns:
                 cursor.execute("ALTER TABLE admin_users ADD COLUMN user_type TEXT DEFAULT 'admin'")
                 conn.commit()
@@ -584,7 +596,7 @@ def initialize_db():
                 default_password = hashlib.md5('admin123'.encode()).hexdigest()
                 cursor.execute("""
                     INSERT INTO admin_users (username, password, name, surname, is_super_admin, user_type)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                 """, ('admin', default_password, 'Admin', 'User', 1, 'admin'))
                 conn.commit()
                 print("✅ Varsayılan admin kullanıcısı oluşturuldu (username: admin, password: admin123)")
@@ -605,9 +617,13 @@ def ensure_kutulama_alan_column():
         return
     try:
         cursor = conn.cursor()
-        # SQLite'da sütun kontrolü
-        cursor.execute("PRAGMA table_info(scv_kutulama)")
-        columns = [row[1] for row in cursor.fetchall()]
+        # PostgreSQL'de sütun kontrolü
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'scv_kutulama'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
         if 'alan' not in columns:
             print("'scv_kutulama' tablosuna 'alan' sütunu ekleniyor...")
             cursor.execute("ALTER TABLE scv_kutulama ADD COLUMN alan TEXT")
@@ -627,8 +643,12 @@ def ensure_scv_sera_new_columns():
         return
     try:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(scv_sera)")
-        columns = [row[1] for row in cursor.fetchall()]
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'scv_sera'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
         if 'el_grubu' not in columns:
             print("'scv_sera' tablosuna 'el_grubu' sütunu ekleniyor...")
             cursor.execute("ALTER TABLE scv_sera ADD COLUMN el_grubu TEXT")
@@ -676,7 +696,7 @@ def add_fcv_genel_data():
     try:
         cursor = conn.cursor()
         sql = """INSERT INTO fcv_genel (firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
         params = (
             data['firinNo'], data['tarla'], data['turSayisi'], data['gTarih'], data['cTarih'],
             data['yasKg'], data['kuruKg'], data['ortalama'], data['koliSayisi'], data['yakitToplam']
@@ -736,10 +756,10 @@ def get_kirim_summary():
     '''
     params = []
     if tarih:
-        sql += ' AND g.tarih = ?'
+        sql += ' AND g.tarih = %s'
         params.append(tarih)
     if user_id:
-        sql += ' AND u.id = ?'
+        sql += ' AND u.id = %s'
         params.append(user_id)
     sql += ' ORDER BY g.tarih DESC, u.name, u.surname'
 
@@ -769,9 +789,9 @@ def add_or_update_gunluk_entry():
     if not all(k in data for k in required):
         return jsonify({'message': 'userId, tarih ve bocaSayisi zorunludur.'}), 400
     
-    sql_check = "SELECT id FROM fcv_kirim_gunluk WHERE userId = ? AND tarih = ?"
-    sql_insert = "INSERT INTO fcv_kirim_gunluk (userId, tarih, bocaSayisi, yazici_adi) VALUES (?, ?, ?, ?)"
-    sql_update = "UPDATE fcv_kirim_gunluk SET bocaSayisi = ?, yazici_adi = ? WHERE id = ?"
+    sql_check = "SELECT id FROM fcv_kirim_gunluk WHERE userId = %s AND tarih = %s"
+    sql_insert = "INSERT INTO fcv_kirim_gunluk (userId, tarih, bocaSayisi, yazici_adi) VALUES (%s, %s, %s, %s)"
+    sql_update = "UPDATE fcv_kirim_gunluk SET bocaSayisi = %s, yazici_adi = %s WHERE id = %s"
     
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -797,7 +817,7 @@ def add_agirlik_entry():
     if not data.get('gunlukId') or not data.get('agirlik'):
         return jsonify({'message': 'gunlukId ve agirlik zorunludur.'}), 400
         
-    sql = "INSERT INTO fcv_kirim_agirlik (gunlukId, agirlik, yazici_adi) VALUES (?, ?, ?)"
+    sql = "INSERT INTO fcv_kirim_agirlik (gunlukId, agirlik, yazici_adi) VALUES (%s, %s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -817,7 +837,7 @@ def get_agirlik_details_by_gunlukId():
     if not gunluk_id:
         return jsonify({'message': 'gunlukId parametresi zorunludur.'}), 400
         
-    sql = "SELECT id, agirlik, created_at FROM fcv_kirim_agirlik WHERE gunlukId = ? ORDER BY id"
+    sql = "SELECT id, agirlik, created_at FROM fcv_kirim_agirlik WHERE gunlukId = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -834,7 +854,7 @@ def get_agirlik_details_by_gunlukId():
 @app.route('/api/fcv_kirim/agirlik/<int:agirlik_id>', methods=['DELETE'])
 def delete_agirlik_entry(agirlik_id):
     """Bir ağırlık girişini siler."""
-    sql = "DELETE FROM fcv_kirim_agirlik WHERE id = ?"
+    sql = "DELETE FROM fcv_kirim_agirlik WHERE id = %s"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -887,7 +907,7 @@ def handle_izmir_kutulama():
         INSERT INTO izmir_kutulama (
             tarih, dayibasi, sergi_numaralari, kutular,
             toplam_yas_tutun, toplam_kuru_tutun, yas_kuru_orani, yazici_adi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
         
         params = (
@@ -930,12 +950,11 @@ def get_izmir_kutulama():
 def get_bosaltilan_sergiler():
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
-        
         # Boşaltılan sergi numaralarını al
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("""
-            SELECT DISTINCT json_each.value as sergi_no
-            FROM izmir_kutulama, json_each(izmir_kutulama.sergi_numaralari)
+            SELECT DISTINCT jsonb_array_elements_text(sergi_numaralari::jsonb) as sergi_no
+            FROM izmir_kutulama
         """)
         
         results = [row['sergi_no'] for row in cursor.fetchall()]
@@ -1016,7 +1035,7 @@ def bosalt_sergiler():
             cursor.execute("""
                 UPDATE sergi_kiriz 
                 SET toplam_sepet = 0, updated_at = CURRENT_TIMESTAMP
-                WHERE sergi_no = ?
+                WHERE sergi_no = %s
             """, (sergi_no,))
         
         conn.commit()
@@ -1057,12 +1076,12 @@ def get_jti_scv_dizim_summary():
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            cursor.execute("SELECT id, agirlik FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
             agirliklar = cursor.fetchall()
             agirlikDetails = []
             for agirlik_row in agirliklar:
                 agirlik_id, agirlik = agirlik_row
-                cursor.execute("SELECT yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                cursor.execute("SELECT yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
                 agirlikDetails.append({
                     'agirlik': agirlik,
@@ -1081,8 +1100,8 @@ def add_jti_scv_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM jti_scv_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO jti_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    sql_check = "SELECT id FROM jti_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
+    sql_insert = "INSERT INTO jti_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1116,7 +1135,7 @@ def add_jti_scv_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
+        cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1129,7 +1148,7 @@ def get_jti_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yazici_adi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik, yazici_adi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1139,7 +1158,7 @@ def get_jti_scv_dizim_agirlik_details():
         results = []
         for row in cursor.fetchall():
             row_dict = dict(zip(columns, row))
-            cursor.execute("SELECT id, yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            cursor.execute("SELECT id, yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (row_dict['id'],))
             yaprak = cursor.fetchone()
             if yaprak:
                 row_dict['yaprakSayisi'] = yaprak[1]
@@ -1174,14 +1193,14 @@ def add_or_update_jti_scv_dizim_gunluk():
     try:
         cursor = conn.cursor()
         # Kayıt var mı kontrol et
-        cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
+        cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing[0]))
+            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -1220,12 +1239,12 @@ def get_pmi_scv_dizim_summary():
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
             agirliklar = cursor.fetchall()
             agirlikDetails = []
             for agirlik_row in agirliklar:
                 agirlik_id, agirlik = agirlik_row
-                cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
                 agirlikDetails.append({
                     'agirlik': agirlik,
@@ -1244,8 +1263,8 @@ def add_pmi_scv_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_scv_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO pmi_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    sql_check = "SELECT id FROM pmi_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
+    sql_insert = "INSERT INTO pmi_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1274,7 +1293,7 @@ def add_pmi_scv_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
+        cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1287,7 +1306,7 @@ def get_pmi_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik, yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1297,7 +1316,7 @@ def get_pmi_scv_dizim_agirlik_details():
         results = []
         for row in cursor.fetchall():
             row_dict = dict(zip(columns, row))
-            cursor.execute("SELECT id, yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            cursor.execute("SELECT id, yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (row_dict['id'],))
             yaprak = cursor.fetchone()
             if yaprak:
                 row_dict['yaprakSayisi'] = yaprak[1]
@@ -1323,14 +1342,14 @@ def add_or_update_pmi_scv_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = ?", dayibasi_id)
+        cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = %s", dayibasi_id)
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing.id))
+            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing.id))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -1369,12 +1388,12 @@ def get_pmi_topping_dizim_summary():
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id LIMIT 10", (r['dayibasi_id'],))
+            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
             agirliklar = cursor.fetchall()
             agirlikDetails = []
             for agirlik_row in agirliklar:
                 agirlik_id, agirlik = agirlik_row
-                cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
                 agirlikDetails.append({
                     'agirlik': agirlik,
@@ -1393,8 +1412,8 @@ def add_pmi_topping_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_topping_dizim_dayibasi_table WHERE dayibasi = ? AND tarih = ?"
-    sql_insert = "INSERT INTO pmi_topping_dizim_dayibasi_table (tarih, dayibasi) VALUES (?, ?)"
+    sql_check = "SELECT id FROM pmi_topping_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
+    sql_insert = "INSERT INTO pmi_topping_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1423,7 +1442,7 @@ def add_pmi_topping_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, agirlik, yazici_adi))
+        cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1436,7 +1455,7 @@ def get_pmi_topping_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = ? ORDER BY id"
+    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1446,7 +1465,7 @@ def get_pmi_topping_dizim_agirlik_details():
         results = []
         for row in cursor.fetchall():
             row_dict = dict(zip(columns, row))
-            cursor.execute("SELECT id, yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = ? ORDER BY id DESC LIMIT 1", (row_dict['id'],))
+            cursor.execute("SELECT id, yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (row_dict['id'],))
             yaprak = cursor.fetchone()
             if yaprak:
                 row_dict['yaprakSayisi'] = yaprak[1]
@@ -1472,14 +1491,14 @@ def add_or_update_pmi_topping_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = ?", (dayibasi_id,))
+        cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, data['yazici_adi'], existing[0]))
+            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
-            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (?, ?, ?)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
@@ -1567,7 +1586,7 @@ def add_scv_sera():
             sera_yeri, alan, sera_no, dizi_sayisi, dizi_kg1, dizi_kg2, dizi_kg3, dizi_kg4, dizi_kg5, dizi_kg6,
             el_grubu, soldurma_giris_tarihi, soldurma_bitis_tarihi
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             data['sera_yeri'], data['alan'], data['sera_no'], data['dizi_sayisi'],
@@ -1657,10 +1676,10 @@ def add_scv_sera_yeri():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (?, ?)", (sera_yeri, toplam_sera_sayisi))
+        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (%s, %s)", (sera_yeri, toplam_sera_sayisi))
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
     except Exception as e:
         return jsonify({'message': f'Hata: {e}'}), 500
@@ -1709,7 +1728,7 @@ def add_scv_kutulama():
         cursor = conn.cursor()
         sql = """
         INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan, yazici_adi, sera_bosaltildi)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             data['tarih'], data['dayibasi'], data['sera_yeri'], data['sera_no'], 
@@ -1721,7 +1740,7 @@ def add_scv_kutulama():
         if data.get('sera_bosaltildi') == 'evet':
             from datetime import datetime
             cursor.execute(
-                "UPDATE scv_sera SET dizi_sayisi = 0, bosaltma_tarihi = ? WHERE sera_yeri = ? AND sera_no = ?",
+                "UPDATE scv_sera SET dizi_sayisi = 0, bosaltma_tarihi = %s WHERE sera_yeri = %s AND sera_no = %s",
                 (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), data['sera_yeri'], data['sera_no'])
             )
         conn.commit()
@@ -1756,7 +1775,7 @@ def get_scv_kutulama_by_date(tarih):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = ? ORDER BY id DESC", tarih)
+        cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = %s ORDER BY id DESC", tarih)
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1778,7 +1797,7 @@ def get_scv_kutulama_summary():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         kutulama_kayitlari = cursor.fetchall()
         
@@ -1868,8 +1887,8 @@ def bosalt_scv_sera():
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE scv_sera
-            SET dizi_sayisi=0, bosaltma_tarihi=?
-            WHERE id=?
+            SET dizi_sayisi=0, bosaltma_tarihi=%s
+            WHERE id=%s
         """, (tarih, sera_id))
         conn.commit()
         cursor.close()
@@ -1892,7 +1911,7 @@ def get_alan_stok():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         alanlar = {}
         
         # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla
@@ -2108,7 +2127,7 @@ def add_sevkiyat():
                     # Veritabanını güncelle
                     yeni_kg = max(0, row_kg - dusulecek_kg)
                     cursor.execute(
-                        "UPDATE izmir_kutulama SET kutular = ?, toplam_kuru_tutun = ? WHERE id = ?",
+                        "UPDATE izmir_kutulama SET kutular = %s, toplam_kuru_tutun = %s WHERE id = %s",
                         (json.dumps(yeni_kutular), yeni_kg, izmir_row['id'])
                     )
                     
@@ -2144,7 +2163,7 @@ def add_sevkiyat():
                         # Veritabanını güncelle
                         yeni_kg = max(0, row_kg - dusulecek_kg)
                         cursor.execute(
-                            "UPDATE scv_kutulama SET kutular = ?, toplam_kuru_kg = ? WHERE id = ?",
+                            "UPDATE scv_kutulama SET kutular = %s, toplam_kuru_kg = %s WHERE id = %s",
                             (json.dumps(yeni_kutular), yeni_kg, scv_row['id'])
                         )
                         
@@ -2153,7 +2172,7 @@ def add_sevkiyat():
         
         # Sevkiyat kaydını ekle
         cursor.execute(
-            "INSERT INTO sevkiyat (tarih, alan, kutu, kg, created_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO sevkiyat (tarih, alan, kutu, kg, created_at) VALUES (%s, %s, %s, %s, %s)",
             (tarih, alan, istenen_kutu, istenen_kg, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         )
         
@@ -2206,8 +2225,12 @@ def update_sevkiyat_table():
     try:
         cursor = conn.cursor()
         # Alan sütunu yoksa ekle
-        cursor.execute("PRAGMA table_info(sevkiyat)")
-        columns = [column[1] for column in cursor.fetchall()]
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'sevkiyat'
+        """)
+        columns = [column[0] for column in cursor.fetchall()]
         
         if 'alan' not in columns:
             cursor.execute("ALTER TABLE sevkiyat ADD COLUMN alan TEXT")
@@ -2412,7 +2435,7 @@ def update_fcv_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE fcv_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        cursor.execute("UPDATE fcv_kirim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2434,7 +2457,7 @@ def update_izmir_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE izmir_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        cursor.execute("UPDATE izmir_kirim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2458,7 +2481,7 @@ def update_pmi_topping_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_topping_kirim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+        cursor.execute("UPDATE pmi_topping_kirim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2481,7 +2504,7 @@ def update_fcv_kirim_gunluk(gunluk_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE fcv_kirim_gunluk SET bocaSayisi = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, yazici_adi, gunluk_id))
+        cursor.execute("UPDATE fcv_kirim_gunluk SET bocaSayisi = %s, yazici_adi = %s WHERE id = %s", (bohcaSayisi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
@@ -2503,7 +2526,7 @@ def update_izmir_kirim_gunluk(gunluk_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = ?, yazici_adi = ? WHERE id = ?", (bohcaSayisi, yazici_adi, gunluk_id))
+        cursor.execute("UPDATE izmir_kirim_gunluk SET bohcaSayisi = %s, yazici_adi = %s WHERE id = %s", (bohcaSayisi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
@@ -2525,7 +2548,7 @@ def update_jti_scv_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
@@ -2547,7 +2570,7 @@ def update_pmi_scv_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
@@ -2569,7 +2592,7 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = ?, yazici_adi = ? WHERE id = ?", (diziAdedi, yazici_adi, gunluk_id))
+        cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
@@ -2593,9 +2616,9 @@ def update_pmi_scv_dizim_agirlik(agirlik_id):
     try:
         cursor = conn.cursor()
         if yaprakSayisi is not None:
-            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
-            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2619,9 +2642,9 @@ def update_jti_scv_dizim_agirlik(agirlik_id):
     try:
         cursor = conn.cursor()
         if yaprakSayisi is not None:
-            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
-            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2645,9 +2668,9 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
     try:
         cursor = conn.cursor()
         if yaprakSayisi is not None:
-            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
-            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = ?, yazici_adi = ? WHERE id = ?", (agirlik, yazici_adi, agirlik_id))
+            cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2669,7 +2692,7 @@ def add_jti_scv_dizim_yaprak():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO jti_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        cursor.execute("INSERT INTO jti_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2688,7 +2711,7 @@ def update_jti_scv_dizim_yaprak(yaprak_id):
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE jti_scv_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        cursor.execute("UPDATE jti_scv_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
@@ -2710,7 +2733,7 @@ def add_pmi_scv_dizim_yaprak():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        cursor.execute("INSERT INTO pmi_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2729,7 +2752,7 @@ def update_pmi_scv_dizim_yaprak(yaprak_id):
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_scv_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        cursor.execute("UPDATE pmi_scv_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
@@ -2751,7 +2774,7 @@ def add_pmi_topping_dizim_yaprak():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO pmi_topping_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (?, ?, ?)", (agirlik_id, yaprakSayisi, yazici_adi))
+        cursor.execute("INSERT INTO pmi_topping_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -2770,7 +2793,7 @@ def update_pmi_topping_dizim_yaprak(yaprak_id):
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE pmi_topping_dizim_yaprak SET yaprakSayisi = ?, yazici_adi = ? WHERE id = ?", (yaprakSayisi, yazici_adi, yaprak_id))
+        cursor.execute("UPDATE pmi_topping_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
@@ -2794,7 +2817,7 @@ def add_traktor_gelis_jti_kirim():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_jti_kirim (tarih, plaka, gelis_no)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['tarih'], data['plaka'], data['gelis_no']
@@ -2838,7 +2861,7 @@ def add_traktor_gelis_jti_kirim_dayibasi():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_jti_kirim_dayibasi (traktor_gelis_jti_kirim_id, dayibasi_adi, bohca_sayisi)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_jti_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
@@ -2882,7 +2905,7 @@ def add_traktor_gelis_jti_kirim_agirlik():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_jti_kirim_agirlik (traktor_gelis_jti_kirim_id, agirlik, created_at)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_jti_kirim_id'], data['agirlik'], data['created_at']
@@ -2924,7 +2947,7 @@ def update_traktor_gelis_jti_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE traktor_gelis_jti_kirim_agirlik SET agirlik = ? WHERE id = ?", (agirlik, agirlik_id))
+        cursor.execute("UPDATE traktor_gelis_jti_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -2945,11 +2968,11 @@ def get_traktor_gelis_jti_kirim_summary():
         cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
-            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi WHERE traktor_gelis_jti_kirim_id = ?", (kart['id'],))
+            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi WHERE traktor_gelis_jti_kirim_id = %s", (kart['id'],))
             dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['dayibasilari'] = dayibasilari
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
-            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_jti_kirim_agirlik WHERE traktor_gelis_jti_kirim_id = ? ORDER BY id", (kart['id'],))
+            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_jti_kirim_agirlik WHERE traktor_gelis_jti_kirim_id = %s ORDER BY id", (kart['id'],))
             agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['agirliklar'] = agirliklar
             if agirliklar:
@@ -2978,7 +3001,7 @@ def add_traktor_gelis_pmi_kirim():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_kirim (tarih, plaka, gelis_no)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['tarih'], data['plaka'], data['gelis_no']
@@ -3022,7 +3045,7 @@ def add_traktor_gelis_pmi_kirim_dayibasi():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_kirim_dayibasi (traktor_gelis_pmi_kirim_id, dayibasi_adi, bohca_sayisi)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_pmi_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
@@ -3066,7 +3089,7 @@ def add_traktor_gelis_pmi_kirim_agirlik():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_kirim_agirlik (traktor_gelis_pmi_kirim_id, agirlik, created_at)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_pmi_kirim_id'], data['agirlik'], data['created_at']
@@ -3108,7 +3131,7 @@ def update_traktor_gelis_pmi_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE traktor_gelis_pmi_kirim_agirlik SET agirlik = ? WHERE id = ?", (agirlik, agirlik_id))
+        cursor.execute("UPDATE traktor_gelis_pmi_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3129,11 +3152,11 @@ def get_traktor_gelis_pmi_kirim_summary():
         cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
-            cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim_dayibasi WHERE traktor_gelis_pmi_kirim_id = ?", (kart['id'],))
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim_dayibasi WHERE traktor_gelis_pmi_kirim_id = %s", (kart['id'],))
             dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['dayibasilari'] = dayibasilari
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
-            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_pmi_kirim_agirlik WHERE traktor_gelis_pmi_kirim_id = ? ORDER BY id", (kart['id'],))
+            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_pmi_kirim_agirlik WHERE traktor_gelis_pmi_kirim_id = %s ORDER BY id", (kart['id'],))
             agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['agirliklar'] = agirliklar
             if agirliklar:
@@ -3162,7 +3185,7 @@ def add_traktor_gelis_pmi_topping_kirim():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_topping_kirim (tarih, plaka, gelis_no)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['tarih'], data['plaka'], data['gelis_no']
@@ -3206,7 +3229,7 @@ def add_traktor_gelis_pmi_topping_kirim_dayibasi():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_topping_kirim_dayibasi (traktor_gelis_pmi_topping_kirim_id, dayibasi_adi, bohca_sayisi)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_pmi_topping_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
@@ -3250,7 +3273,7 @@ def add_traktor_gelis_pmi_topping_kirim_agirlik():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_pmi_topping_kirim_agirlik (traktor_gelis_pmi_topping_kirim_id, agirlik, created_at)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_pmi_topping_kirim_id'], data['agirlik'], data['created_at']
@@ -3292,7 +3315,7 @@ def update_traktor_gelis_pmi_topping_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE traktor_gelis_pmi_topping_kirim_agirlik SET agirlik = ? WHERE id = ?", (agirlik, agirlik_id))
+        cursor.execute("UPDATE traktor_gelis_pmi_topping_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3313,11 +3336,11 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
         cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
-            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim_dayibasi WHERE traktor_gelis_pmi_topping_kirim_id = ?", (kart['id'],))
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim_dayibasi WHERE traktor_gelis_pmi_topping_kirim_id = %s", (kart['id'],))
             dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['dayibasilari'] = dayibasilari
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
-            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_pmi_topping_kirim_agirlik WHERE traktor_gelis_pmi_topping_kirim_id = ? ORDER BY id", (kart['id'],))
+            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_pmi_topping_kirim_agirlik WHERE traktor_gelis_pmi_topping_kirim_id = %s ORDER BY id", (kart['id'],))
             agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['agirliklar'] = agirliklar
             if agirliklar:
@@ -3346,7 +3369,7 @@ def add_traktor_gelis_izmir_kirim():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_izmir_kirim (tarih, plaka, gelis_no)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['tarih'], data['plaka'], data['gelis_no']
@@ -3398,7 +3421,7 @@ def handle_traktor_dayibasi():
             cursor = conn.cursor()
             sql = """
             INSERT INTO traktor_gelis_izmir_kirim_dayibasi (traktor_gelis_izmir_kirim_id, dayibasi_adi, bohca_sayisi)
-            VALUES (?, ?, ?)
+            VALUES (%s, %s, %s)
             """
             params = (
                 data['traktor_gelis_izmir_kirim_id'], data['dayibasi_adi'], data['bohca_sayisi']
@@ -3440,7 +3463,7 @@ def add_traktor_gelis_izmir_kirim_agirlik():
         cursor = conn.cursor()
         sql = """
         INSERT INTO traktor_gelis_izmir_kirim_agirlik (traktor_gelis_izmir_kirim_id, agirlik, created_at)
-        VALUES (?, ?, ?)
+        VALUES (%s, %s, %s)
         """
         params = (
             data['traktor_gelis_izmir_kirim_id'], data['agirlik'], data['created_at']
@@ -3482,7 +3505,7 @@ def update_traktor_gelis_izmir_kirim_agirlik(agirlik_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE traktor_gelis_izmir_kirim_agirlik SET agirlik = ? WHERE id = ?", (agirlik, agirlik_id))
+        cursor.execute("UPDATE traktor_gelis_izmir_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
@@ -3503,11 +3526,11 @@ def get_traktor_gelis_izmir_kirim_summary():
         cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
-            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = ?", (kart['id'],))
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = %s", (kart['id'],))
             dayibasilari = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['dayibasilari'] = dayibasilari
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in dayibasilari]) if dayibasilari else 0
-            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_izmir_kirim_agirlik WHERE traktor_gelis_izmir_kirim_id = ? ORDER BY id", (kart['id'],))
+            cursor.execute("SELECT id, agirlik, created_at FROM traktor_gelis_izmir_kirim_agirlik WHERE traktor_gelis_izmir_kirim_id = %s ORDER BY id", (kart['id'],))
             agirliklar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['agirliklar'] = agirliklar
             if agirliklar:
@@ -3542,7 +3565,7 @@ def add_or_update_sergi_kiriz():
         cursor = conn.cursor()
         
         # Mevcut sergiyi kontrol et
-        cursor.execute("SELECT id, toplam_sepet FROM sergi_kiriz WHERE sergi_no = ?", (data['sergi_no'],))
+        cursor.execute("SELECT id, toplam_sepet FROM sergi_kiriz WHERE sergi_no = %s", (data['sergi_no'],))
         sergi = cursor.fetchone()
         
         if sergi:
@@ -3560,15 +3583,15 @@ def add_or_update_sergi_kiriz():
             # Sergiyi güncelle
             cursor.execute("""
                 UPDATE sergi_kiriz 
-                SET toplam_sepet = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                SET toplam_sepet = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
             """, (new_total, sergi_id))
             
             # Dağıtım kaydı ekle
             cursor.execute("""
                 INSERT INTO sergi_sepet_dagitim 
                 (sergi_id, traktor_gelis_izmir_kirim_id, sepet_sayisi)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
             """, (sergi_id, data['traktor_gelis_izmir_id'], data['sepet_sayisi']))
             
             message = f'Sergi {data["sergi_no"]} güncellendi. Yeni toplam: {new_total}/150'
@@ -3576,7 +3599,7 @@ def add_or_update_sergi_kiriz():
             # Yeni sergi oluştur
             cursor.execute("""
                 INSERT INTO sergi_kiriz (sergi_no, toplam_sepet)
-                VALUES (?, ?)
+                VALUES (%s, %s)
             """, (data['sergi_no'], data['sepet_sayisi']))
             sergi_id = cursor.lastrowid
             
@@ -3584,7 +3607,7 @@ def add_or_update_sergi_kiriz():
             cursor.execute("""
                 INSERT INTO sergi_sepet_dagitim 
                 (sergi_id, traktor_gelis_izmir_kirim_id, sepet_sayisi)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
             """, (sergi_id, data['traktor_gelis_izmir_id'], data['sepet_sayisi']))
             
             message = f'Sergi {data["sergi_no"]} oluşturuldu. Toplam sepet: {data["sepet_sayisi"]}/150'
@@ -3640,7 +3663,7 @@ def get_sergi_detay(sergi_no):
                    (150 - toplam_sepet) as kalan_kapasite,
                    CASE WHEN toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
             FROM sergi_kiriz 
-            WHERE sergi_no = ?
+            WHERE sergi_no = %s
         """, (sergi_no,))
         
         sergi = cursor.fetchone()
@@ -3658,7 +3681,7 @@ def get_sergi_detay(sergi_no):
                 d.sepet_sayisi as bu_traktorden_sepet
             FROM sergi_sepet_dagitim d
             JOIN traktor_gelis_izmir_kirim t ON d.traktor_gelis_izmir_kirim_id = t.id
-            WHERE d.sergi_id = ?
+            WHERE d.sergi_id = %s
             ORDER BY t.tarih DESC, t.plaka
         """, (sergi_dict['id'],))
         
@@ -3669,7 +3692,7 @@ def get_sergi_detay(sergi_no):
             cursor.execute("""
                 SELECT AVG(agirlik) as ortalama_agirlik
                 FROM traktor_gelis_izmir_kirim_agirlik 
-                WHERE traktor_gelis_izmir_kirim_id = ?
+                WHERE traktor_gelis_izmir_kirim_id = %s
             """, (dagitim['traktor_id'],))
             
             agirlik_result = cursor.fetchone()
@@ -3716,7 +3739,7 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
             cursor.execute("""
                 SELECT id, dayibasi_adi, bohca_sayisi 
                 FROM traktor_gelis_izmir_kirim_dayibasi 
-                WHERE traktor_gelis_izmir_kirim_id = ?
+                WHERE traktor_gelis_izmir_kirim_id = %s
             """, (kart['id'],))
             kart['dayibasilari'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
             kart['toplam_bohca'] = sum([d['bohca_sayisi'] for d in kart['dayibasilari']]) if kart['dayibasilari'] else 0
@@ -3725,7 +3748,7 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
             cursor.execute("""
                 SELECT id, agirlik, created_at 
                 FROM traktor_gelis_izmir_kirim_agirlik 
-                WHERE traktor_gelis_izmir_kirim_id = ? 
+                WHERE traktor_gelis_izmir_kirim_id = %s 
                 ORDER BY id
             """, (kart['id'],))
             kart['agirliklar'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
@@ -3750,7 +3773,7 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
                     CASE WHEN s.toplam_sepet >= 150 THEN 1 ELSE 0 END as sergi_dolu
                 FROM sergi_sepet_dagitim d
                 JOIN sergi_kiriz s ON d.sergi_id = s.id
-                WHERE d.traktor_gelis_izmir_kirim_id = ?
+                WHERE d.traktor_gelis_izmir_kirim_id = %s
                 ORDER BY s.sergi_no
             """, (kart['id'],))
             kart['sergiler'] = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
@@ -3777,7 +3800,7 @@ def update_scv_sera_bitis_tarihi(sera_id):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("UPDATE scv_sera SET soldurma_bitis_tarihi = ? WHERE id = ?", (soldurma_bitis_tarihi, sera_id))
+        cursor.execute("UPDATE scv_sera SET soldurma_bitis_tarihi = %s WHERE id = %s", (soldurma_bitis_tarihi, sera_id))
         conn.commit()
         return jsonify({'message': 'Soldurma bitiş tarihi güncellendi.'})
     except Exception as e:
@@ -3804,9 +3827,9 @@ def get_jti_scv_kutulama_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            cursor.execute("SELECT id, value FROM jti_scv_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_kuru_kg WHERE dayibasi_id = %s ORDER BY id", r['dayibasi_id'])
             r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM jti_scv_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            cursor.execute("SELECT id, value FROM jti_scv_kutulama_sera_yas_kg WHERE dayibasi_id = %s ORDER BY id", r['dayibasi_id'])
             r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
             r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
             r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
@@ -3839,9 +3862,9 @@ def get_pmi_topping_kutulama_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_kuru_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_kuru_kg WHERE dayibasi_id = %s ORDER BY id", r['dayibasi_id'])
             r['kuruKgList'] = [{'value': row.value} for row in cursor.fetchall()]
-            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_sera_yas_kg WHERE dayibasi_id = ? ORDER BY id", r['dayibasi_id'])
+            cursor.execute("SELECT id, value FROM pmi_topping_kutulama_sera_yas_kg WHERE dayibasi_id = %s ORDER BY id", r['dayibasi_id'])
             r['seraYasKgList'] = [{'value': row.value} for row in cursor.fetchall()]
             r['toplamKuruKg'] = sum([kg['value'] or 0 for kg in r['kuruKgList']])
             r['toplamYasKg'] = sum([kg['value'] or 0 for kg in r['seraYasKgList']])
@@ -3883,10 +3906,14 @@ def admin_login():
         # Önce user_type kolonunun var olup olmadığını kontrol et
         has_user_type = False
         try:
-            cursor.execute("PRAGMA table_info(admin_users)")
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'admin_users'
+            """)
             columns_info = cursor.fetchall()
-            # SQLite PRAGMA table_info döner: (cid, name, type, notnull, default_value, pk)
-            columns = [col[1] for col in columns_info]  # İkinci eleman kolon adı
+            # PostgreSQL information_schema döner: (column_name,)
+            columns = [col[0] for col in columns_info]  # İlk eleman kolon adı
             has_user_type = 'user_type' in columns
         except Exception as e:
             print(f"Kolon kontrolü hatası: {e}")
@@ -3898,7 +3925,7 @@ def admin_login():
                 cursor.execute("""
                     SELECT id, username, name, surname, is_super_admin, user_type
                     FROM admin_users 
-                    WHERE username = ? AND password = ?
+                    WHERE username = %s AND password = %s
                 """, (username, hashed_password))
             except Exception as e:
                 # user_type kolonu varsa ama sorgu başarısız olursa, kolonsuz dene
@@ -3906,7 +3933,7 @@ def admin_login():
                 cursor.execute("""
                     SELECT id, username, name, surname, is_super_admin
                     FROM admin_users 
-                    WHERE username = ? AND password = ?
+                    WHERE username = %s AND password = %s
                 """, (username, hashed_password))
                 has_user_type = False
         else:
@@ -3914,7 +3941,7 @@ def admin_login():
             cursor.execute("""
                 SELECT id, username, name, surname, is_super_admin
                 FROM admin_users 
-                WHERE username = ? AND password = ?
+                WHERE username = %s AND password = %s
             """, (username, hashed_password))
         
         user = cursor.fetchone()
@@ -3925,7 +3952,7 @@ def admin_login():
         cursor.execute("""
             SELECT region_code 
             FROM user_regions 
-            WHERE admin_user_id = ?
+            WHERE admin_user_id = %s
         """, (user['id'],))
         regions = [row['region_code'] for row in cursor.fetchall()]
         
@@ -3939,7 +3966,7 @@ def admin_login():
                     user_type = str(user_type_value).strip().lower()
                 else:
                     # NULL veya boş değer - veritabanından tekrar kontrol et
-                    cursor.execute("SELECT user_type FROM admin_users WHERE id = ?", (user['id'],))
+                    cursor.execute("SELECT user_type FROM admin_users WHERE id = %s", (user['id'],))
                     db_user_type = cursor.fetchone()
                     if db_user_type and db_user_type.get('user_type') and str(db_user_type['user_type']).strip():
                         user_type = str(db_user_type['user_type']).strip().lower()
@@ -4009,7 +4036,7 @@ def get_admin_users():
             cursor.execute("""
                 SELECT region_code 
                 FROM user_regions 
-                WHERE admin_user_id = ?
+                WHERE admin_user_id = %s
             """, (user_dict['id'],))
             user_dict['regions'] = [r['region_code'] for r in cursor.fetchall()]
             user_dict['is_super_admin'] = bool(user_dict['is_super_admin'])
@@ -4045,7 +4072,7 @@ def create_admin_user():
     try:
         cursor = conn.cursor()
         # Kullanıcı adı kontrolü
-        cursor.execute("SELECT id FROM admin_users WHERE username = ?", (username,))
+        cursor.execute("SELECT id FROM admin_users WHERE username = %s", (username,))
         if cursor.fetchone():
             return jsonify({'message': 'Bu kullanıcı adı zaten kullanılıyor.'}), 409
         
@@ -4053,7 +4080,7 @@ def create_admin_user():
         hashed_password = hash_password(password)
         cursor.execute("""
             INSERT INTO admin_users (username, password, name, surname, is_super_admin, user_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (username, hashed_password, name, surname, 1 if is_super_admin else 0, user_type))
         
         user_id = cursor.lastrowid
@@ -4064,14 +4091,14 @@ def create_admin_user():
             for region in all_regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
-                    VALUES (?, ?)
+                    VALUES (%s, %s)
                 """, (user_id, region))
         else:
             # Belirtilen bölgelere erişim ver
             for region in regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
-                    VALUES (?, ?)
+                    VALUES (%s, %s)
                 """, (user_id, region))
         
         conn.commit()
@@ -4106,18 +4133,18 @@ def update_admin_user(user_id):
             hashed_password = hash_password(password)
             cursor.execute("""
                 UPDATE admin_users 
-                SET name = ?, surname = ?, password = ?, is_super_admin = ?, user_type = ?
-                WHERE id = ?
+                SET name = %s, surname = %s, password = %s, is_super_admin = %s, user_type = %s
+                WHERE id = %s
             """, (name, surname, hashed_password, 1 if is_super_admin else 0, user_type, user_id))
         else:
             cursor.execute("""
                 UPDATE admin_users 
-                SET name = ?, surname = ?, is_super_admin = ?, user_type = ?
-                WHERE id = ?
+                SET name = %s, surname = %s, is_super_admin = %s, user_type = %s
+                WHERE id = %s
             """, (name, surname, 1 if is_super_admin else 0, user_type, user_id))
         
         # Mevcut bölge yetkilerini sil
-        cursor.execute("DELETE FROM user_regions WHERE admin_user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM user_regions WHERE admin_user_id = %s", (user_id,))
         
         # Yeni bölge yetkilerini ekle
         if is_super_admin:
@@ -4125,13 +4152,13 @@ def update_admin_user(user_id):
             for region in all_regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
-                    VALUES (?, ?)
+                    VALUES (%s, %s)
                 """, (user_id, region))
         else:
             for region in regions:
                 cursor.execute("""
                     INSERT INTO user_regions (admin_user_id, region_code)
-                    VALUES (?, ?)
+                    VALUES (%s, %s)
                 """, (user_id, region))
         
         conn.commit()
@@ -4152,7 +4179,7 @@ def delete_admin_user(user_id):
     
     try:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM admin_users WHERE id = ?", (user_id,))
+        cursor.execute("DELETE FROM admin_users WHERE id = %s", (user_id,))
         conn.commit()
         
         if cursor.rowcount == 0:
@@ -4189,9 +4216,8 @@ if __name__ == '__main__':
     else:
         print("❌ Veritabanı bağlantısı kurulamadı. Uygulama başlatılamıyor.")
         print("\n🔧 Sorun giderme adımları:")
-        print("1. SQL Server Management Studio'dan veritabanına bağlanabildiğinizi kontrol edin")
-        print("2. Windows Authentication'ın etkin olduğundan emin olun")
-        print("3. SQL Server Browser servisinin çalıştığını kontrol edin")
+        print("1. PostgreSQL veritabanı bağlantı URL'ini kontrol edin")
+        print("2. Veritabanı sunucusunun erişilebilir olduğundan emin olun")
+        print("3. Kullanıcı adı ve şifrenin doğru olduğunu kontrol edin")
         print("4. Firewall ayarlarını kontrol edin")
-        print("5. 'pip install pyodbc' ile pyodbc'nin güncel olduğundan emin olun")
-        print("5. 'pip install pyodbc' ile pyodbc'nin güncel olduğundan emin olun")
+        print("5. 'pip install psycopg2-binary' ile psycopg2'nin yüklü olduğundan emin olun")
