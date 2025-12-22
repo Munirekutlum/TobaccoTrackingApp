@@ -3562,7 +3562,7 @@ def add_or_update_sergi_kiriz():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         
         # Mevcut sergiyi kontrol et
         cursor.execute("SELECT id, toplam_sepet FROM sergi_kiriz WHERE sergi_no = %s", (data['sergi_no'],))
@@ -3570,7 +3570,8 @@ def add_or_update_sergi_kiriz():
         
         if sergi:
             # Var olan sergiye ekleme yap
-            sergi_id, current_sepet = sergi
+            sergi_id = sergi['id'] if isinstance(sergi, dict) else sergi[0]
+            current_sepet = sergi['toplam_sepet'] if isinstance(sergi, dict) else sergi[1]
             new_total = current_sepet + data['sepet_sayisi']
             
             if new_total > 150:
@@ -3600,8 +3601,10 @@ def add_or_update_sergi_kiriz():
             cursor.execute("""
                 INSERT INTO sergi_kiriz (sergi_no, toplam_sepet)
                 VALUES (%s, %s)
+                RETURNING id
             """, (data['sergi_no'], data['sepet_sayisi']))
-            sergi_id = cursor.lastrowid
+            result = cursor.fetchone()
+            sergi_id = result['id'] if isinstance(result, dict) else result[0]
             
             # Dağıtım kaydı ekle
             cursor.execute("""
@@ -3900,23 +3903,27 @@ def admin_login():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         hashed_password = hash_password(password)
         
         # Önce user_type kolonunun var olup olmadığını kontrol et
+        # Basit bir try-except ile kontrol et
         has_user_type = False
         try:
+            # Direkt olarak user_type kolonunu sorgula
             cursor.execute("""
                 SELECT column_name 
                 FROM information_schema.columns 
-                WHERE table_schema = 'public' AND table_name = 'admin_users'
+                WHERE table_schema = 'public' 
+                AND table_name = 'admin_users' 
+                AND column_name = 'user_type'
             """)
-            columns_info = cursor.fetchall()
-            # PostgreSQL information_schema döner: (column_name,)
-            columns = [col[0] for col in columns_info]  # İlk eleman kolon adı
-            has_user_type = 'user_type' in columns
+            result = cursor.fetchone()
+            has_user_type = result is not None
         except Exception as e:
             print(f"Kolon kontrolü hatası: {e}")
+            import traceback
+            print(traceback.format_exc())
             has_user_type = False
         
         # Kullanıcıyı sorgula - user_type kolonu varsa dahil et
@@ -4070,7 +4077,7 @@ def create_admin_user():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         # Kullanıcı adı kontrolü
         cursor.execute("SELECT id FROM admin_users WHERE username = %s", (username,))
         if cursor.fetchone():
@@ -4081,9 +4088,11 @@ def create_admin_user():
         cursor.execute("""
             INSERT INTO admin_users (username, password, name, surname, is_super_admin, user_type)
             VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
         """, (username, hashed_password, name, surname, 1 if is_super_admin else 0, user_type))
         
-        user_id = cursor.lastrowid
+        result = cursor.fetchone()
+        user_id = result['id']
         
         # Super admin ise tüm bölgelere erişim ver
         if is_super_admin:
