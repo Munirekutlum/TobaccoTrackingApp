@@ -3896,7 +3896,7 @@ def admin_login():
         if has_user_type:
             try:
                 cursor.execute("""
-                    SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type
+                    SELECT id, username, name, surname, is_super_admin, user_type
                     FROM admin_users 
                     WHERE username = ? AND password = ?
                 """, (username, hashed_password))
@@ -3934,19 +3934,19 @@ def admin_login():
         if has_user_type:
             try:
                 user_type_value = user.get('user_type')
-                if user_type_value is not None:
+                if user_type_value is not None and str(user_type_value).strip():
+                    # Değer varsa ve boş değilse kullan
                     user_type = str(user_type_value).strip().lower()
-                    # Boş string kontrolü
-                    if not user_type:
-                        user_type = 'admin'
                 else:
-                    # NULL değer - veritabanından tekrar kontrol et
+                    # NULL veya boş değer - veritabanından tekrar kontrol et
                     cursor.execute("SELECT user_type FROM admin_users WHERE id = ?", (user['id'],))
                     db_user_type = cursor.fetchone()
-                    if db_user_type and db_user_type.get('user_type'):
+                    if db_user_type and db_user_type.get('user_type') and str(db_user_type['user_type']).strip():
                         user_type = str(db_user_type['user_type']).strip().lower()
                     else:
+                        # Hala NULL veya boş ise, varsayılan olarak admin
                         user_type = 'admin'
+                        print(f"⚠️ User {username} (ID: {user['id']}) için user_type NULL/boş, varsayılan 'admin' kullanılıyor")
             except Exception as e:
                 print(f"user_type okuma hatası: {e}")
                 import traceback
