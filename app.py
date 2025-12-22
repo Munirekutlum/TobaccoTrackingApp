@@ -4029,7 +4029,7 @@ def get_admin_users():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         cursor.execute("""
             SELECT id, username, name, surname, is_super_admin, COALESCE(user_type, 'admin') as user_type, created_at
             FROM admin_users
@@ -4038,6 +4038,7 @@ def get_admin_users():
         
         users = []
         for row in cursor.fetchall():
+            # RealDictCursor kullanıldığı için row zaten bir dictionary
             user_dict = dict(row)
             # Her kullanıcının bölgelerini al
             cursor.execute("""
@@ -4045,13 +4046,18 @@ def get_admin_users():
                 FROM user_regions 
                 WHERE admin_user_id = %s
             """, (user_dict['id'],))
-            user_dict['regions'] = [r['region_code'] for r in cursor.fetchall()]
+            regions = cursor.fetchall()
+            user_dict['regions'] = [r['region_code'] for r in regions]
             user_dict['is_super_admin'] = bool(user_dict['is_super_admin'])
             user_dict['user_type'] = user_dict.get('user_type') or 'admin'
             users.append(user_dict)
         
         return jsonify(users), 200
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Admin users listeleme hatası: {e}")
+        print(f"Detaylar: {error_details}")
         return jsonify({'message': f'Hata: {e}'}), 500
     finally:
         if conn:
