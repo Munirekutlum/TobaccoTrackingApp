@@ -4218,6 +4218,192 @@ def get_all_regions():
     ]
     return jsonify(regions), 200
 
+@app.route('/api/admin/region-stats/<region_code>', methods=['GET'])
+def get_region_stats(region_code):
+    """Bölge istatistiklerini getir"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Bölge koduna göre filtreleme yapılacak
+        # Şimdilik tüm verileri topla (bölge filtrelemesi daha sonra eklenebilir)
+        stats = {
+            'region_code': region_code,
+            'total_kg': 0,
+            'total_sepet': 0,
+            'total_kutu': 0,
+            'total_kutu_kg': 0
+        }
+        
+        if region_code == 'ALL':
+            # Genel toplam - tüm bölgeler
+            # SCV Kutulama toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_kuru_kg), 0) as total_kg,
+                    COUNT(*) as total_kutu
+                FROM scv_kutulama
+            """)
+            scv_result = cursor.fetchone()
+            if scv_result:
+                stats['total_kutu_kg'] += float(scv_result['total_kg'] or 0)
+                stats['total_kutu'] += int(scv_result['total_kutu'] or 0)
+            
+            # İzmir Kutulama toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_kuru_kg), 0) as total_kg,
+                    COUNT(*) as total_kutu
+                FROM izmir_kutulama
+            """)
+            izmir_result = cursor.fetchone()
+            if izmir_result:
+                stats['total_kutu_kg'] += float(izmir_result['total_kg'] or 0)
+                stats['total_kutu'] += int(izmir_result['total_kutu'] or 0)
+            
+            # FCV Kırım toplamları (sepet sayısı)
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(boca_sayisi), 0) as total_sepet
+                FROM fcv_gunluk
+            """)
+            fcv_result = cursor.fetchone()
+            if fcv_result:
+                stats['total_sepet'] += int(fcv_result['total_sepet'] or 0)
+            
+            # İzmir Kırım toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_bohca), 0) as total_sepet,
+                    COALESCE(SUM(toplam_kg), 0) as total_kg
+                FROM traktor_gelis_izmir_kirim
+            """)
+            izmir_kirim_result = cursor.fetchone()
+            if izmir_kirim_result:
+                stats['total_sepet'] += int(izmir_kirim_result['total_sepet'] or 0)
+                stats['total_kg'] += float(izmir_kirim_result['total_kg'] or 0)
+        else:
+            # Belirli bir bölge için (şimdilik tüm verileri göster, bölge filtrelemesi daha sonra eklenebilir)
+            # SCV Kutulama toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_kuru_kg), 0) as total_kg,
+                    COUNT(*) as total_kutu
+                FROM scv_kutulama
+                WHERE alan = %s
+            """, (region_code,))
+            scv_result = cursor.fetchone()
+            if scv_result:
+                stats['total_kutu_kg'] += float(scv_result['total_kg'] or 0)
+                stats['total_kutu'] += int(scv_result['total_kutu'] or 0)
+        
+        return jsonify(stats), 200
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Bölge istatistikleri hatası: {e}")
+        print(f"Detaylar: {error_details}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/region-details/<region_code>', methods=['GET'])
+def get_region_details(region_code):
+    """Bölge detay verilerini getir (tablolar ve grafikler için)"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        result = {
+            'region_code': region_code,
+            'kirim_data': [],
+            'kutulama_data': [],
+            'sergi_data': [],
+            'summary': {
+                'total_kg': 0,
+                'total_sepet': 0,
+                'total_kutu': 0,
+                'total_kutu_kg': 0
+            }
+        }
+        
+        if region_code == 'ALL':
+            # Genel toplam - tüm bölgeler
+            # Kırım verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, plaka, toplam_bohca, toplam_kg
+                FROM traktor_gelis_izmir_kirim
+                ORDER BY tarih DESC
+                LIMIT 100
+            """)
+            result['kirim_data'] = cursor.fetchall()
+            
+            # Kutulama verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, dayibasi, toplam_kuru_kg, kutular
+                FROM izmir_kutulama
+                ORDER BY tarih DESC
+                LIMIT 100
+            """)
+            result['kutulama_data'] = cursor.fetchall()
+            
+            # Sergi verileri
+            cursor.execute("""
+                SELECT 
+                    id, sergi_no, toplam_sepet, created_at
+                FROM sergi_kiriz
+                ORDER BY created_at DESC
+                LIMIT 100
+            """)
+            result['sergi_data'] = cursor.fetchall()
+        else:
+            # Belirli bir bölge için
+            # SCV Kutulama verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, dayibasi, toplam_kuru_kg, kutular
+                FROM scv_kutulama
+                WHERE alan = %s
+                ORDER BY tarih DESC
+                LIMIT 100
+            """, (region_code,))
+            result['kutulama_data'] = cursor.fetchall()
+        
+        # Özet istatistikler
+        if result['kirim_data']:
+            result['summary']['total_sepet'] = sum([row.get('toplam_bohca', 0) or 0 for row in result['kirim_data']])
+            result['summary']['total_kg'] = sum([row.get('toplam_kg', 0) or 0 for row in result['kirim_data']])
+        
+        if result['kutulama_data']:
+            result['summary']['total_kutu_kg'] = sum([row.get('toplam_kuru_kg', 0) or 0 for row in result['kutulama_data']])
+            # Kutu sayısını kutular JSON'undan hesapla
+            for row in result['kutulama_data']:
+                try:
+                    kutular = json.loads(row.get('kutular', '[]') or '[]')
+                    result['summary']['total_kutu'] += len(kutular)
+                except:
+                    pass
+        
+        return jsonify(result), 200
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Bölge detay hatası: {e}")
+        print(f"Detaylar: {error_details}")
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
 if __name__ == '__main__':
     print(" Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
