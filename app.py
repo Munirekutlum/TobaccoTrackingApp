@@ -860,6 +860,34 @@ def ensure_sevkiyat_region_column():
     finally:
         conn.close()
 
+def ensure_scv_sera_yerleri_region_column():
+    """SCV sera yerleri tablosuna region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (scv_sera_yerleri region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'scv_sera_yerleri'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
+        if 'region' not in columns:
+            print("'scv_sera_yerleri' tablosuna 'region' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE scv_sera_yerleri ADD COLUMN region TEXT")
+            conn.commit()
+            print("'scv_sera_yerleri' tablosuna 'region' sütunu eklendi.")
+        else:
+            print("'scv_sera_yerleri' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"SCV sera yerleri region kolonu eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
 
@@ -903,7 +931,11 @@ def get_fcv_genel_data():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel ORDER BY id DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel WHERE region = %s ORDER BY id DESC", (region,))
+        else:
+            cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel ORDER BY id DESC")
         
         # Sütun adlarını al
         columns = [column[0] for column in cursor.description]
@@ -1999,16 +2031,28 @@ def get_scv_sera_yerleri():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        # Hem scv_sera tablosundan hem de scv_sera_yerleri tablosundan sera yerlerini al
-        cursor.execute("""
-            SELECT DISTINCT sera_yeri 
-            FROM (
-                SELECT sera_yeri FROM scv_sera
-                UNION
-                SELECT sera_yeri FROM scv_sera_yerleri
-            ) combined_yerler
-            ORDER BY sera_yeri
-        """)
+        region = request.args.get('region')
+        # Hem scv_sera tablosundan hem de scv_sera_yerleri tablosundan sera yerlerini al (bölge filtresi ile)
+        if region:
+            cursor.execute("""
+                SELECT DISTINCT sera_yeri 
+                FROM (
+                    SELECT sera_yeri FROM scv_sera WHERE region = %s
+                    UNION
+                    SELECT sera_yeri FROM scv_sera_yerleri WHERE region = %s
+                ) combined_yerler
+                ORDER BY sera_yeri
+            """, (region, region))
+        else:
+            cursor.execute("""
+                SELECT DISTINCT sera_yeri 
+                FROM (
+                    SELECT sera_yeri FROM scv_sera
+                    UNION
+                    SELECT sera_yeri FROM scv_sera_yerleri
+                ) combined_yerler
+                ORDER BY sera_yeri
+            """)
         yerler = [row[0] for row in cursor.fetchall()]
         return jsonify(yerler)
     except Exception as e:
@@ -2024,7 +2068,11 @@ def get_scv_sera_nolar():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT sera_no FROM scv_sera ORDER BY sera_no")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT DISTINCT sera_no FROM scv_sera WHERE region = %s ORDER BY sera_no", (region,))
+        else:
+            cursor.execute("SELECT DISTINCT sera_no FROM scv_sera ORDER BY sera_no")
         nolar = [row[0] for row in cursor.fetchall()]
         return jsonify(nolar)
     except Exception as e:
@@ -2039,9 +2087,13 @@ def add_scv_sera_yeri():
     data = request.get_json()
     sera_yeri = data.get('sera_yeri')
     toplam_sera_sayisi = data.get('toplam_sera_sayisi')
+    region = data.get('region')
     
     if not sera_yeri or not toplam_sera_sayisi:
         return jsonify({'message': 'Sera yeri ve toplam sera sayısı gerekli.'}), 400
+    
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     
     conn = get_db_connection()
     if not conn:
@@ -2049,7 +2101,7 @@ def add_scv_sera_yeri():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi) VALUES (%s, %s)", (sera_yeri, toplam_sera_sayisi))
+        cursor.execute("INSERT INTO scv_sera_yerleri (sera_yeri, toplam_sera_sayisi, region) VALUES (%s, %s, %s)", (sera_yeri, toplam_sera_sayisi, region))
         conn.commit()
         return jsonify({'message': 'Sera yeri başarıyla eklendi.'}), 201
     except psycopg2.IntegrityError:
@@ -2068,14 +2120,26 @@ def get_scv_sera_yerleri_detay():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
-                   COUNT(s.id) as mevcut_sera_sayisi
-            FROM scv_sera_yerleri sy
-            LEFT JOIN scv_sera s ON sy.sera_yeri = s.sera_yeri
-            GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
-            ORDER BY sy.sera_yeri
-        """)
+        region = request.args.get('region')
+        if region:
+            cursor.execute("""
+                SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
+                       COUNT(s.id) as mevcut_sera_sayisi
+                FROM scv_sera_yerleri sy
+                LEFT JOIN scv_sera s ON sy.sera_yeri = s.sera_yeri AND s.region = %s
+                WHERE sy.region = %s
+                GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
+                ORDER BY sy.sera_yeri
+            """, (region, region))
+        else:
+            cursor.execute("""
+                SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
+                       COUNT(s.id) as mevcut_sera_sayisi
+                FROM scv_sera_yerleri sy
+                LEFT JOIN scv_sera s ON sy.sera_yeri = s.sera_yeri
+                GROUP BY sy.sera_yeri, sy.toplam_sera_sayisi
+                ORDER BY sy.sera_yeri
+            """)
         
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -2299,6 +2363,66 @@ def bosalt_scv_sera():
 @app.route("/")
 def home():
     return "API çalışıyor!"
+
+# Eski verileri temizleme endpoint'i (region kolonu NULL olan verileri siler)
+@app.route('/api/cleanup_old_data', methods=['POST'])
+def cleanup_old_data():
+    """Region kolonu NULL olan eski verileri temizler"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        deleted_counts = {}
+        
+        # Tüm region kolonu olan tabloları temizle
+        tables_to_clean = [
+            'traktor_gelis_jti_kirim',
+            'traktor_gelis_pmi_kirim',
+            'traktor_gelis_pmi_topping_kirim',
+            'traktor_gelis_izmir_kirim',
+            'jti_scv_dizim_dayibasi_table',
+            'pmi_scv_dizim_dayibasi_table',
+            'pmi_topping_dizim_dayibasi_table',
+            'scv_kutulama',
+            'scv_sera',
+            'scv_sera_yerleri',
+            'fcv_kirim_gunluk',
+            'fcv_genel',
+            'sevkiyat'
+        ]
+        
+        for table_name in tables_to_clean:
+            try:
+                # Önce region kolonunun olup olmadığını kontrol et
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = 'public' AND table_name = %s AND column_name = 'region'
+                """, (table_name,))
+                has_region = cursor.fetchone()
+                
+                if has_region:
+                    # Region NULL olan kayıtları sil
+                    cursor.execute(f"DELETE FROM {table_name} WHERE region IS NULL")
+                    deleted_count = cursor.rowcount
+                    deleted_counts[table_name] = deleted_count
+                    conn.commit()
+            except Exception as e:
+                print(f"{table_name} tablosu temizlenirken hata: {e}")
+                continue
+        
+        return jsonify({
+            'message': 'Eski veriler temizlendi.',
+            'deleted_counts': deleted_counts
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 
 # Alan stok bilgilerini getiren endpoint
@@ -2688,6 +2812,7 @@ def get_genel_stok():
     
     try:
         cursor = conn.cursor()
+        region = request.args.get('region')
         
         # Sonuç yapısını başlat
         result = {
@@ -2702,110 +2827,284 @@ def get_genel_stok():
         # === 1. SCV BÖLÜMÜ ===
         
         # 1.1 SCV Kırım (JTI + PMI)
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(ta.agirlik), 0) as kg, 
-                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
-            FROM traktor_gelis_jti_kirim t
-            LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
-            LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
-            WHERE ta.agirlik > 0
-        """)
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_jti_kirim t
+                LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
+                LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
+                WHERE ta.agirlik > 0 AND t.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_jti_kirim t
+                LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
+                LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
+                WHERE ta.agirlik > 0
+            """)
         scv_kirim = cursor.fetchone()
         result['toplamlar']['SCV']['kirim_kg'] += float(scv_kirim[0])
         result['toplamlar']['SCV']['kirim_bohca'] += int(scv_kirim[1])
         
         # PMI SCV Kırım
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(ta.agirlik), 0) as kg, 
-                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
-            FROM traktor_gelis_pmi_kirim t
-            LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
-            LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
-            WHERE ta.agirlik > 0
-        """)
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_pmi_kirim t
+                LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
+                LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
+                WHERE ta.agirlik > 0 AND t.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_pmi_kirim t
+                LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
+                LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
+                WHERE ta.agirlik > 0
+            """)
         pmi_kirim = cursor.fetchone()
         result['toplamlar']['SCV']['kirim_kg'] += float(pmi_kirim[0])
         result['toplamlar']['SCV']['kirim_bohca'] += int(pmi_kirim[1])
 
+        # PMI Topping Kırım
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_pmi_topping_kirim t
+                LEFT JOIN traktor_gelis_pmi_topping_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_topping_kirim_id
+                LEFT JOIN traktor_gelis_pmi_topping_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_topping_kirim_id
+                WHERE ta.agirlik > 0 AND t.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_pmi_topping_kirim t
+                LEFT JOIN traktor_gelis_pmi_topping_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_topping_kirim_id
+                LEFT JOIN traktor_gelis_pmi_topping_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_topping_kirim_id
+                WHERE ta.agirlik > 0
+            """)
+        pmi_topping_kirim = cursor.fetchone()
+        result['toplamlar']['SCV']['kirim_kg'] += float(pmi_topping_kirim[0])
+        result['toplamlar']['SCV']['kirim_bohca'] += int(pmi_topping_kirim[1])
+
         # 1.2 SCV Dizim (JTI + PMI)
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(a.agirlik), 0) as kg, 
-                COALESCE(SUM(g.diziAdedi), 0) as dizi
-            FROM jti_scv_dizim_gunluk g
-            LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-            WHERE a.agirlik > 0
-        """)
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM jti_scv_dizim_gunluk g
+                JOIN jti_scv_dizim_dayibasi_table d ON g.dayibasi_id = d.id
+                LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0 AND d.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM jti_scv_dizim_gunluk g
+                LEFT JOIN jti_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0
+            """)
         scv_dizim = cursor.fetchone()
         result['toplamlar']['SCV']['dizim_kg'] += float(scv_dizim[0])
         result['toplamlar']['SCV']['dizim_dizi'] += int(scv_dizim[1])
 
+        # PMI SCV Dizim
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM pmi_scv_dizim_gunluk g
+                JOIN pmi_scv_dizim_dayibasi_table d ON g.dayibasi_id = d.id
+                LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0 AND d.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM pmi_scv_dizim_gunluk g
+                LEFT JOIN pmi_scv_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0
+            """)
+        pmi_scv_dizim = cursor.fetchone()
+        result['toplamlar']['SCV']['dizim_kg'] += float(pmi_scv_dizim[0])
+        result['toplamlar']['SCV']['dizim_dizi'] += int(pmi_scv_dizim[1])
+
+        # PMI Topping Dizim
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM pmi_topping_dizim_gunluk g
+                JOIN pmi_topping_dizim_dayibasi_table d ON g.dayibasi_id = d.id
+                LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0 AND d.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM pmi_topping_dizim_gunluk g
+                LEFT JOIN pmi_topping_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0
+            """)
+        pmi_topping_dizim = cursor.fetchone()
+        result['toplamlar']['SCV']['dizim_kg'] += float(pmi_topping_dizim[0])
+        result['toplamlar']['SCV']['dizim_dizi'] += int(pmi_topping_dizim[1])
+
         # 1.3 SCV Kutulama
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
+        if region:
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0 AND region = %s", (region,))
+        else:
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
         scv_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['SCV']['kutulama_kg'] += float(scv_kutulama_kg)
 
-        cursor.execute("SELECT kutular FROM scv_kutulama")
+        if region:
+            cursor.execute("SELECT kutular FROM scv_kutulama WHERE region = %s", (region,))
+        else:
+            cursor.execute("SELECT kutular FROM scv_kutulama")
         scv_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['SCV']['kutulama_kutu'] += int(scv_kutu_sayisi)
 
         # === 2. İZMİR BÖLÜMÜ ===
         
         # 2.1 İzmir Kırım
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(ta.agirlik), 0) as kg, 
-                COALESCE(SUM(td.bohca_sayisi), 0) as bohca
-            FROM traktor_gelis_izmir_kirim t
-            LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
-            LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
-            WHERE ta.agirlik > 0
-        """)
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_izmir_kirim t
+                LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
+                LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
+                WHERE ta.agirlik > 0 AND t.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(ta.agirlik), 0) as kg, 
+                    COALESCE(SUM(td.bohca_sayisi), 0) as bohca
+                FROM traktor_gelis_izmir_kirim t
+                LEFT JOIN traktor_gelis_izmir_kirim_agirlik ta ON t.id = ta.traktor_gelis_izmir_kirim_id
+                LEFT JOIN traktor_gelis_izmir_kirim_dayibasi td ON t.id = td.traktor_gelis_izmir_kirim_id
+                WHERE ta.agirlik > 0
+            """)
         izmir_kirim = cursor.fetchone()
         result['toplamlar']['IZMIR']['kirim_kg'] = float(izmir_kirim[0])
         result['toplamlar']['IZMIR']['kirim_bohca'] = int(izmir_kirim[1])
 
-        # 2.2 İzmir Dizim
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(a.agirlik), 0) as kg, 
-                COALESCE(SUM(g.diziAdedi), 0) as dizi
-            FROM izmir_dizim_gunluk g
-            LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
-            WHERE a.agirlik > 0
-        """)
+        # 2.2 İzmir Dizim (izmir_dizim tablosunda region kolonu olmayabilir, kontrol et)
+        try:
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'izmir_dizim_gunluk' AND column_name = 'region'")
+            has_region = cursor.fetchone()
+            if has_region and region:
+                cursor.execute("""
+                    SELECT 
+                        COALESCE(SUM(a.agirlik), 0) as kg, 
+                        COALESCE(SUM(g.diziAdedi), 0) as dizi
+                    FROM izmir_dizim_gunluk g
+                    LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                    WHERE a.agirlik > 0 AND g.region = %s
+                """, (region,))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        COALESCE(SUM(a.agirlik), 0) as kg, 
+                        COALESCE(SUM(g.diziAdedi), 0) as dizi
+                    FROM izmir_dizim_gunluk g
+                    LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                    WHERE a.agirlik > 0
+                """)
+        except:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(a.agirlik), 0) as kg, 
+                    COALESCE(SUM(g.diziAdedi), 0) as dizi
+                FROM izmir_dizim_gunluk g
+                LEFT JOIN izmir_dizim_agirlik a ON g.dayibasi_id = a.dayibasi_id
+                WHERE a.agirlik > 0
+            """)
         izmir_dizim = cursor.fetchone()
         result['toplamlar']['IZMIR']['dizim_kg'] = float(izmir_dizim[0])
         result['toplamlar']['IZMIR']['dizim_dizi'] = int(izmir_dizim[1])
 
         # 2.3 İzmir Kutulama
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
+        try:
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'izmir_kutulama' AND column_name = 'region'")
+            has_region = cursor.fetchone()
+            if has_region and region:
+                cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0 AND region = %s", (region,))
+            else:
+                cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
+        except:
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
         izmir_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['IZMIR']['kutulama_kg'] = float(izmir_kutulama_kg)
 
-        cursor.execute("SELECT kutular FROM izmir_kutulama")
+        try:
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'izmir_kutulama' AND column_name = 'region'")
+            has_region = cursor.fetchone()
+            if has_region and region:
+                cursor.execute("SELECT kutular FROM izmir_kutulama WHERE region = %s", (region,))
+            else:
+                cursor.execute("SELECT kutular FROM izmir_kutulama")
+        except:
+            cursor.execute("SELECT kutular FROM izmir_kutulama")
         izmir_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['IZMIR']['kutulama_kutu'] = int(izmir_kutu_sayisi)
 
         # === 3. FCV BÖLÜMÜ ===
         
         # 3.1 FCV Kırım
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(fa.agirlik), 0) as kg, 
-                COALESCE(SUM(fg.bocaSayisi), 0) as bohca
-            FROM fcv_kirim_gunluk fg
-            LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
-            WHERE fa.agirlik > 0
-        """)
+        if region:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(fa.agirlik), 0) as kg, 
+                    COALESCE(SUM(fg.bocaSayisi), 0) as bohca
+                FROM fcv_kirim_gunluk fg
+                LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
+                WHERE fa.agirlik > 0 AND fg.region = %s
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(fa.agirlik), 0) as kg, 
+                    COALESCE(SUM(fg.bocaSayisi), 0) as bohca
+                FROM fcv_kirim_gunluk fg
+                LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
+                WHERE fa.agirlik > 0
+            """)
         fcv_kirim = cursor.fetchone()
         result['toplamlar']['FCV']['kirim_kg'] = float(fcv_kirim[0])
         result['toplamlar']['FCV']['kirim_bohca'] = int(fcv_kirim[1])
 
         # 3.2 FCV Kutulama
-        cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0")
+        if region:
+            cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0 AND region = %s", (region,))
+        else:
+            cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0")
         fcv_kutulama = cursor.fetchone()
         result['toplamlar']['FCV']['kutulama_kg'] = float(fcv_kutulama[0])
         result['toplamlar']['FCV']['kutulama_kutu'] = int(fcv_kutulama[1])
@@ -5219,6 +5518,7 @@ if __name__ == '__main__':
         ensure_scv_sera_region_column()
         ensure_fcv_region_columns()
         ensure_sevkiyat_region_column()
+        ensure_scv_sera_yerleri_region_column()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
         port = int(os.environ.get("PORT", 5000))
