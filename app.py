@@ -1349,10 +1349,10 @@ def get_jti_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM jti_scv_dizim_dayibasi_table d
                 LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
                 WHERE d.region = %s
@@ -1365,10 +1365,10 @@ def get_jti_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM jti_scv_dizim_dayibasi_table d
                 LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
                 ORDER BY d.tarih DESC, d.dayibasi
@@ -1376,8 +1376,10 @@ def get_jti_scv_dizim_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            if r['ortalamaAgirlik'] and r['diziAdedi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
+            diziAdedi = r.get('diziAdedi', 0) or 0
+            if ortalamaAgirlik and diziAdedi:
+                r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
@@ -1595,10 +1597,10 @@ def get_pmi_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM pmi_scv_dizim_dayibasi_table d
                 LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
                 WHERE d.region = %s
@@ -1611,10 +1613,10 @@ def get_pmi_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM pmi_scv_dizim_dayibasi_table d
                 LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
                 ORDER BY d.tarih DESC, d.dayibasi
@@ -1622,8 +1624,10 @@ def get_pmi_scv_dizim_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            if r['ortalamaAgirlik'] and r['diziAdedi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
+            diziAdedi = r.get('diziAdedi', 0) or 0
+            if ortalamaAgirlik and diziAdedi:
+                r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
@@ -1827,10 +1831,10 @@ def get_pmi_topping_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM pmi_topping_dizim_dayibasi_table d
                 LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
                 WHERE d.region = %s
@@ -1843,10 +1847,10 @@ def get_pmi_topping_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    g.diziAdedi,
+                    COALESCE(g.diziAdedi, 0) as diziAdedi,
                     g.yazici_adi,
-                    (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                    (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                    COALESCE((SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
+                    COALESCE((SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM pmi_topping_dizim_dayibasi_table d
                 LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
                 ORDER BY d.tarih DESC, d.dayibasi
@@ -1854,8 +1858,10 @@ def get_pmi_topping_dizim_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            if r['ortalamaAgirlik'] and r['diziAdedi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
+            diziAdedi = r.get('diziAdedi', 0) or 0
+            if ortalamaAgirlik and diziAdedi:
+                r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
@@ -5827,6 +5833,75 @@ def get_region_details(region_code):
         print(f"Bölge detay hatası: {e}")
         print(f"Detaylar: {error_details}")
         return jsonify({'message': f'Hata: {e}'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/clear-all-data', methods=['POST'])
+def clear_all_data():
+    """Users tablosu hariç tüm tabloları temizle (test için)"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Tüm tabloları al (users hariç)
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_type = 'BASE TABLE'
+            AND table_name != 'users'
+            ORDER BY table_name
+        """)
+        
+        tables = [row[0] for row in cursor.fetchall()]
+        
+        if not tables:
+            return jsonify({'message': 'Temizlenecek tablo bulunamadı.'}), 404
+        
+        # Foreign key constraint'lerini geçici olarak devre dışı bırak
+        cursor.execute("SET session_replication_role = 'replica';")
+        
+        cleared_tables = []
+        errors = []
+        
+        # Her tabloyu temizle
+        for table in tables:
+            try:
+                cursor.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                cleared_tables.append(table)
+            except Exception as e:
+                errors.append(f"{table}: {str(e)}")
+        
+        # Foreign key constraint'lerini tekrar aktif et
+        cursor.execute("SET session_replication_role = 'origin';")
+        
+        conn.commit()
+        
+        result = {
+            'message': f'{len(cleared_tables)} tablo temizlendi.',
+            'cleared_tables': cleared_tables,
+            'total_tables': len(tables),
+            'errors': errors if errors else None
+        }
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Veritabanı temizleme hatası: {error_trace}")
+        if conn:
+            conn.rollback()
+            # Foreign key constraint'lerini tekrar aktif et
+            try:
+                cursor.execute("SET session_replication_role = 'origin';")
+            except:
+                pass
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
