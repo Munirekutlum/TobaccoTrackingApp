@@ -5653,7 +5653,7 @@ def get_all_regions():
 
 @app.route('/api/admin/region-stats/<region_code>', methods=['GET'])
 def get_region_stats(region_code):
-    """Bölge istatistiklerini getir"""
+    """Bölge istatistiklerini getir - bölge bazlı filtreleme ile"""
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -5661,8 +5661,6 @@ def get_region_stats(region_code):
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Bölge koduna göre filtreleme yapılacak
-        # Şimdilik tüm verileri topla (bölge filtrelemesi daha sonra eklenebilir)
         stats = {
             'region_code': region_code,
             'total_kg': 0,
@@ -5701,7 +5699,7 @@ def get_region_stats(region_code):
             cursor.execute("""
                 SELECT 
                     COALESCE(SUM(boca_sayisi), 0) as total_sepet
-                FROM fcv_gunluk
+                FROM fcv_kirim_gunluk
             """)
             fcv_result = cursor.fetchone()
             if fcv_result:
@@ -5719,19 +5717,56 @@ def get_region_stats(region_code):
                 stats['total_sepet'] += int(izmir_kirim_result['total_sepet'] or 0)
                 stats['total_kg'] += float(izmir_kirim_result['total_kg'] or 0)
         else:
-            # Belirli bir bölge için (şimdilik tüm verileri göster, bölge filtrelemesi daha sonra eklenebilir)
+            # Belirli bir bölge için - region kolonuna göre filtrele
             # SCV Kutulama toplamları
             cursor.execute("""
                 SELECT 
                     COALESCE(SUM(toplam_kuru_kg), 0) as total_kg,
                     COUNT(*) as total_kutu
                 FROM scv_kutulama
-                WHERE alan = %s
+                WHERE region = %s
             """, (region_code,))
             scv_result = cursor.fetchone()
             if scv_result:
                 stats['total_kutu_kg'] += float(scv_result['total_kg'] or 0)
                 stats['total_kutu'] += int(scv_result['total_kutu'] or 0)
+            
+            # İzmir Kutulama toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_kuru_kg), 0) as total_kg,
+                    COUNT(*) as total_kutu
+                FROM izmir_kutulama
+                WHERE region = %s
+            """, (region_code,))
+            izmir_result = cursor.fetchone()
+            if izmir_result:
+                stats['total_kutu_kg'] += float(izmir_result['total_kg'] or 0)
+                stats['total_kutu'] += int(izmir_result['total_kutu'] or 0)
+            
+            # FCV Kırım toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(boca_sayisi), 0) as total_sepet
+                FROM fcv_kirim_gunluk
+                WHERE region = %s
+            """, (region_code,))
+            fcv_result = cursor.fetchone()
+            if fcv_result:
+                stats['total_sepet'] += int(fcv_result['total_sepet'] or 0)
+            
+            # İzmir Kırım toplamları
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(toplam_bohca), 0) as total_sepet,
+                    COALESCE(SUM(toplam_kg), 0) as total_kg
+                FROM traktor_gelis_izmir_kirim
+                WHERE region = %s
+            """, (region_code,))
+            izmir_kirim_result = cursor.fetchone()
+            if izmir_kirim_result:
+                stats['total_sepet'] += int(izmir_kirim_result['total_sepet'] or 0)
+                stats['total_kg'] += float(izmir_kirim_result['total_kg'] or 0)
         
         return jsonify(stats), 200
     except Exception as e:
@@ -5746,7 +5781,7 @@ def get_region_stats(region_code):
 
 @app.route('/api/admin/region-details/<region_code>', methods=['GET'])
 def get_region_details(region_code):
-    """Bölge detay verilerini getir (tablolar ve grafikler için)"""
+    """Bölge detay verilerini getir (tablolar ve grafikler için) - bölge bazlı filtreleme ile"""
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -5789,6 +5824,17 @@ def get_region_details(region_code):
             """)
             result['kutulama_data'] = cursor.fetchall()
             
+            # SCV Kutulama verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, dayibasi, toplam_kuru_kg, kutular
+                FROM scv_kutulama
+                ORDER BY tarih DESC
+                LIMIT 100
+            """)
+            scv_kutulama = cursor.fetchall()
+            result['kutulama_data'].extend(scv_kutulama)
+            
             # Sergi verileri
             cursor.execute("""
                 SELECT 
@@ -5799,30 +5845,91 @@ def get_region_details(region_code):
             """)
             result['sergi_data'] = cursor.fetchall()
         else:
-            # Belirli bir bölge için
+            # Belirli bir bölge için - region kolonuna göre filtrele
+            # İzmir Kırım verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, plaka, toplam_bohca, toplam_kg
+                FROM traktor_gelis_izmir_kirim
+                WHERE region = %s
+                ORDER BY tarih DESC
+                LIMIT 100
+            """, (region_code,))
+            result['kirim_data'] = cursor.fetchall()
+            
+            # JTI SCV Kırım verileri
+            cursor.execute("""
+                SELECT 
+                    t.id, t.tarih, t.plaka,
+                    COALESCE(SUM(td.bohca_sayisi), 0) as toplam_bohca,
+                    COALESCE(SUM(ta.agirlik), 0) as toplam_kg
+                FROM traktor_gelis_jti_kirim t
+                LEFT JOIN traktor_gelis_jti_kirim_dayibasi td ON t.id = td.traktor_gelis_jti_kirim_id
+                LEFT JOIN traktor_gelis_jti_kirim_agirlik ta ON t.id = ta.traktor_gelis_jti_kirim_id
+                WHERE t.region = %s
+                GROUP BY t.id, t.tarih, t.plaka
+                ORDER BY t.tarih DESC
+                LIMIT 100
+            """, (region_code,))
+            jti_kirim = cursor.fetchall()
+            result['kirim_data'].extend(jti_kirim)
+            
+            # PMI SCV Kırım verileri
+            cursor.execute("""
+                SELECT 
+                    t.id, t.tarih, t.plaka,
+                    COALESCE(SUM(td.bohca_sayisi), 0) as toplam_bohca,
+                    COALESCE(SUM(ta.agirlik), 0) as toplam_kg
+                FROM traktor_gelis_pmi_kirim t
+                LEFT JOIN traktor_gelis_pmi_kirim_dayibasi td ON t.id = td.traktor_gelis_pmi_kirim_id
+                LEFT JOIN traktor_gelis_pmi_kirim_agirlik ta ON t.id = ta.traktor_gelis_pmi_kirim_id
+                WHERE t.region = %s
+                GROUP BY t.id, t.tarih, t.plaka
+                ORDER BY t.tarih DESC
+                LIMIT 100
+            """, (region_code,))
+            pmi_kirim = cursor.fetchall()
+            result['kirim_data'].extend(pmi_kirim)
+            
+            # İzmir Kutulama verileri
+            cursor.execute("""
+                SELECT 
+                    id, tarih, dayibasi, toplam_kuru_kg, kutular
+                FROM izmir_kutulama
+                WHERE region = %s
+                ORDER BY tarih DESC
+                LIMIT 100
+            """, (region_code,))
+            result['kutulama_data'] = cursor.fetchall()
+            
             # SCV Kutulama verileri
             cursor.execute("""
                 SELECT 
                     id, tarih, dayibasi, toplam_kuru_kg, kutular
                 FROM scv_kutulama
-                WHERE alan = %s
+                WHERE region = %s
                 ORDER BY tarih DESC
                 LIMIT 100
             """, (region_code,))
-            result['kutulama_data'] = cursor.fetchall()
+            scv_kutulama = cursor.fetchall()
+            result['kutulama_data'].extend(scv_kutulama)
         
         # Özet istatistikler
         if result['kirim_data']:
-            result['summary']['total_sepet'] = sum([row.get('toplam_bohca', 0) or 0 for row in result['kirim_data']])
-            result['summary']['total_kg'] = sum([row.get('toplam_kg', 0) or 0 for row in result['kirim_data']])
+            result['summary']['total_sepet'] = sum([float(row.get('toplam_bohca', 0) or 0) for row in result['kirim_data']])
+            result['summary']['total_kg'] = sum([float(row.get('toplam_kg', 0) or 0) for row in result['kirim_data']])
         
         if result['kutulama_data']:
-            result['summary']['total_kutu_kg'] = sum([row.get('toplam_kuru_kg', 0) or 0 for row in result['kutulama_data']])
+            result['summary']['total_kutu_kg'] = sum([float(row.get('toplam_kuru_kg', 0) or 0) for row in result['kutulama_data']])
             # Kutu sayısını kutular JSON'undan hesapla
             for row in result['kutulama_data']:
                 try:
-                    kutular = json.loads(row.get('kutular', '[]') or '[]')
-                    result['summary']['total_kutu'] += len(kutular)
+                    kutular_str = row.get('kutular', '[]') or '[]'
+                    if isinstance(kutular_str, str):
+                        kutular = json.loads(kutular_str)
+                    else:
+                        kutular = kutular_str
+                    result['summary']['total_kutu'] += len([k for k in kutular if k and k > 0])
                 except:
                     pass
         
