@@ -2979,9 +2979,17 @@ def get_genel_stok():
         # Sonuç yapısını başlat
         result = {
             'toplamlar': {
+                # SCV genel toplam
                 'SCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                # SCV alt departmanlar (manager ekranında ayrı gösterim için)
+                'JTI_SCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'PMI_SCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'SCV_TOPPING': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                # İzmir
                 'IZMIR': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                # FCV
                 'FCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                # Diğerleri
                 'N_RUSTICA': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
                 'BASMA': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
                 'PRILEP': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
@@ -3016,6 +3024,9 @@ def get_genel_stok():
         scv_kirim = cursor.fetchone()
         result['toplamlar']['SCV']['kirim_kg'] += float(scv_kirim[0])
         result['toplamlar']['SCV']['kirim_bohca'] += int(scv_kirim[1])
+        # JTI SCV detay
+        result['toplamlar']['JTI_SCV']['kirim_kg'] = float(scv_kirim[0])
+        result['toplamlar']['JTI_SCV']['kirim_bohca'] = int(scv_kirim[1])
         
         # PMI SCV Kırım
         if region:
@@ -3041,6 +3052,9 @@ def get_genel_stok():
         pmi_kirim = cursor.fetchone()
         result['toplamlar']['SCV']['kirim_kg'] += float(pmi_kirim[0])
         result['toplamlar']['SCV']['kirim_bohca'] += int(pmi_kirim[1])
+        # PMI SCV detay
+        result['toplamlar']['PMI_SCV']['kirim_kg'] = float(pmi_kirim[0])
+        result['toplamlar']['PMI_SCV']['kirim_bohca'] = int(pmi_kirim[1])
 
         # PMI Topping Kırım
         if region:
@@ -3066,6 +3080,9 @@ def get_genel_stok():
         pmi_topping_kirim = cursor.fetchone()
         result['toplamlar']['SCV']['kirim_kg'] += float(pmi_topping_kirim[0])
         result['toplamlar']['SCV']['kirim_bohca'] += int(pmi_topping_kirim[1])
+        # SCV TOPPING detay
+        result['toplamlar']['SCV_TOPPING']['kirim_kg'] = float(pmi_topping_kirim[0])
+        result['toplamlar']['SCV_TOPPING']['kirim_bohca'] = int(pmi_topping_kirim[1])
 
         # 1.2 SCV Dizim (JTI + PMI)
         if region:
@@ -3090,6 +3107,8 @@ def get_genel_stok():
         scv_dizim = cursor.fetchone()
         result['toplamlar']['SCV']['dizim_kg'] += float(scv_dizim[0])
         result['toplamlar']['SCV']['dizim_dizi'] += int(scv_dizim[1])
+        result['toplamlar']['JTI_SCV']['dizim_kg'] = float(scv_dizim[0])
+        result['toplamlar']['JTI_SCV']['dizim_dizi'] = int(scv_dizim[1])
 
         # PMI SCV Dizim
         if region:
@@ -3114,6 +3133,8 @@ def get_genel_stok():
         pmi_scv_dizim = cursor.fetchone()
         result['toplamlar']['SCV']['dizim_kg'] += float(pmi_scv_dizim[0])
         result['toplamlar']['SCV']['dizim_dizi'] += int(pmi_scv_dizim[1])
+        result['toplamlar']['PMI_SCV']['dizim_kg'] = float(pmi_scv_dizim[0])
+        result['toplamlar']['PMI_SCV']['dizim_dizi'] = int(pmi_scv_dizim[1])
 
         # PMI Topping Dizim
         if region:
@@ -3138,6 +3159,8 @@ def get_genel_stok():
         pmi_topping_dizim = cursor.fetchone()
         result['toplamlar']['SCV']['dizim_kg'] += float(pmi_topping_dizim[0])
         result['toplamlar']['SCV']['dizim_dizi'] += int(pmi_topping_dizim[1])
+        result['toplamlar']['SCV_TOPPING']['dizim_kg'] = float(pmi_topping_dizim[0])
+        result['toplamlar']['SCV_TOPPING']['dizim_dizi'] = int(pmi_topping_dizim[1])
 
         # 1.3 SCV Kutulama
         if region:
@@ -3153,6 +3176,7 @@ def get_genel_stok():
             cursor.execute("SELECT kutular FROM scv_kutulama")
         scv_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['SCV']['kutulama_kutu'] += int(scv_kutu_sayisi)
+        # SCV alt departmanlar için kutulama verisi alt ayrımı olmadığı için paylaşılmıyor (0 bırakıldı)
 
         # === 2. İZMİR BÖLÜMÜ ===
         
