@@ -675,6 +675,191 @@ def ensure_scv_sera_new_columns():
     finally:
         conn.close()
 
+def ensure_scv_dizim_region_columns():
+    """SCV dizim tablolarına region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (scv_dizim region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        # JTI SCV Dizim tabloları
+        tables = [
+            'jti_scv_dizim_dayibasi_table',
+            'pmi_scv_dizim_dayibasi_table',
+            'pmi_topping_dizim_dayibasi_table'
+        ]
+        for table_name in tables:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = %s
+            """, (table_name,))
+            columns = [row[0] for row in cursor.fetchall()]
+            if 'region' not in columns:
+                print(f"'{table_name}' tablosuna 'region' sütunu ekleniyor...")
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN region TEXT")
+                conn.commit()
+                print(f"'{table_name}' tablosuna 'region' sütunu eklendi.")
+            else:
+                print(f"'{table_name}' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"SCV dizim region kolonları eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
+def ensure_scv_kirim_region_columns():
+    """SCV kırım tablolarına region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (scv_kirim region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        # Kırım tabloları
+        tables = [
+            'traktor_gelis_jti_kirim',
+            'traktor_gelis_pmi_kirim',
+            'traktor_gelis_pmi_topping_kirim',
+            'traktor_gelis_izmir_kirim'
+        ]
+        for table_name in tables:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = %s
+            """, (table_name,))
+            columns = [row[0] for row in cursor.fetchall()]
+            if 'region' not in columns:
+                print(f"'{table_name}' tablosuna 'region' sütunu ekleniyor...")
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN region TEXT")
+                conn.commit()
+                print(f"'{table_name}' tablosuna 'region' sütunu eklendi.")
+            else:
+                print(f"'{table_name}' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"SCV kırım region kolonları eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
+def ensure_scv_kutulama_region_column():
+    """SCV kutulama tablosuna region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (scv_kutulama region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'scv_kutulama'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
+        if 'region' not in columns:
+            print("'scv_kutulama' tablosuna 'region' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE scv_kutulama ADD COLUMN region TEXT")
+            conn.commit()
+            print("'scv_kutulama' tablosuna 'region' sütunu eklendi.")
+        else:
+            print("'scv_kutulama' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"SCV kutulama region kolonu eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
+def ensure_scv_sera_region_column():
+    """SCV sera tablosuna region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (scv_sera region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'scv_sera'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
+        if 'region' not in columns:
+            print("'scv_sera' tablosuna 'region' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE scv_sera ADD COLUMN region TEXT")
+            conn.commit()
+            print("'scv_sera' tablosuna 'region' sütunu eklendi.")
+        else:
+            print("'scv_sera' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"SCV sera region kolonu eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
+def ensure_fcv_region_columns():
+    """FCV tablolarına region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (fcv region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        tables = ['fcv_kirim_gunluk', 'fcv_genel']
+        for table_name in tables:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = %s
+            """, (table_name,))
+            columns = [row[0] for row in cursor.fetchall()]
+            if 'region' not in columns:
+                print(f"'{table_name}' tablosuna 'region' sütunu ekleniyor...")
+                cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN region TEXT")
+                conn.commit()
+                print(f"'{table_name}' tablosuna 'region' sütunu eklendi.")
+            else:
+                print(f"'{table_name}' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"FCV region kolonları eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
+def ensure_sevkiyat_region_column():
+    """Sevkiyat tablosuna region kolonu ekler"""
+    conn = get_db_connection()
+    if not conn:
+        print("Veritabanı bağlantı hatası (sevkiyat region kolonu kontrolü)")
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' AND table_name = 'sevkiyat'
+        """)
+        columns = [row[0] for row in cursor.fetchall()]
+        if 'region' not in columns:
+            print("'sevkiyat' tablosuna 'region' sütunu ekleniyor...")
+            cursor.execute("ALTER TABLE sevkiyat ADD COLUMN region TEXT")
+            conn.commit()
+            print("'sevkiyat' tablosuna 'region' sütunu eklendi.")
+        else:
+            print("'sevkiyat' tablosunda 'region' sütunu zaten var.")
+    except Exception as e:
+        print(f"Sevkiyat region kolonu eklenirken hata: {e}")
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        conn.close()
+
 # --- API Endpointleri ---
 #-----------------------------------------------------------------------------------------------
 
@@ -738,6 +923,7 @@ def get_fcv_genel_data():
 def get_kirim_summary():
     tarih = request.args.get('tarih')
     user_id = request.args.get('userId')
+    region = request.args.get('region')
     # Tarih parametresi opsiyonel, verilmezse tüm kayıtlar gelir
     sql = '''
         SELECT 
@@ -761,6 +947,9 @@ def get_kirim_summary():
     if user_id:
         sql += ' AND u.id = %s'
         params.append(user_id)
+    if region:
+        sql += ' AND g.region = %s'
+        params.append(region)
     sql += ' ORDER BY g.tarih DESC, u.name, u.surname'
 
     conn = get_db_connection()
@@ -788,21 +977,29 @@ def add_or_update_gunluk_entry():
     required = ['userId', 'tarih', 'bocaSayisi']
     if not all(k in data for k in required):
         return jsonify({'message': 'userId, tarih ve bocaSayisi zorunludur.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     
-    sql_check = "SELECT id FROM fcv_kirim_gunluk WHERE userId = %s AND tarih = %s"
-    sql_insert = "INSERT INTO fcv_kirim_gunluk (userId, tarih, bocaSayisi, yazici_adi) VALUES (%s, %s, %s, %s)"
+    sql_check = "SELECT id FROM fcv_kirim_gunluk WHERE userId = %s AND tarih = %s AND region = %s"
+    sql_insert = "INSERT INTO fcv_kirim_gunluk (userId, tarih, bocaSayisi, yazici_adi, region) VALUES (%s, %s, %s, %s, %s)"
     sql_update = "UPDATE fcv_kirim_gunluk SET bocaSayisi = %s, yazici_adi = %s WHERE id = %s"
     
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, (data['userId'], data['tarih']))
+        cursor.execute(sql_check, (data['userId'], data['tarih'], region))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute(sql_update, (data['bocaSayisi'], data['yazici_adi'], existing.id))
+            # Bölge kontrolü
+            cursor.execute("SELECT region FROM fcv_kirim_gunluk WHERE id = %s", (existing[0],))
+            existing_region = cursor.fetchone()
+            if existing_region and existing_region[0] != region:
+                return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
+            cursor.execute(sql_update, (data['bocaSayisi'], data['yazici_adi'], existing[0]))
         else:
-            cursor.execute(sql_insert, (data['userId'], data['tarih'], data['bocaSayisi'], data['yazici_adi']))
+            cursor.execute(sql_insert, (data['userId'], data['tarih'], data['bocaSayisi'], data['yazici_adi'], region))
         conn.commit()
         return jsonify({'message': 'Günlük giriş başarıyla kaydedildi.'}), 200
     except Exception as e:
@@ -816,12 +1013,22 @@ def add_agirlik_entry():
     data = request.get_json()
     if not data.get('gunlukId') or not data.get('agirlik'):
         return jsonify({'message': 'gunlukId ve agirlik zorunludur.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
         
     sql = "INSERT INTO fcv_kirim_agirlik (gunlukId, agirlik, yazici_adi) VALUES (%s, %s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - gunlukId'den region'ı kontrol et
+        cursor.execute("SELECT region FROM fcv_kirim_gunluk WHERE id = %s", (data['gunlukId'],))
+        gunluk_region = cursor.fetchone()
+        if not gunluk_region:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        if gunluk_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu günlük kaydı farklı bir bölgeye ait.'}), 403
         cursor.execute(sql, (data['gunlukId'], data['agirlik'], data['yazici_adi']))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
@@ -1054,20 +1261,41 @@ def get_jti_scv_dizim_summary():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
-                g.diziAdedi,
-                g.yazici_adi,
-                (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
-            FROM jti_scv_dizim_dayibasi_table d
-            LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
+        # Bölge parametresini al
+        region = request.args.get('region')
+        
+        # SQL sorgusuna bölge filtresi ekle
+        if region:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM jti_scv_dizim_dayibasi_table d
+                LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+                WHERE d.region = %s
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''', (region,))
+        else:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM jti_scv_dizim_dayibasi_table d
+                LEFT JOIN jti_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''')
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
@@ -1100,17 +1328,20 @@ def add_jti_scv_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM jti_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
-    sql_insert = "INSERT INTO jti_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    sql_check = "SELECT id FROM jti_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s AND region = %s"
+    sql_insert = "INSERT INTO jti_scv_dizim_dayibasi_table (tarih, dayibasi, region) VALUES (%s, %s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih'], region))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi'], region))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1124,8 +1355,11 @@ def add_jti_scv_dizim_agirlik():
     agirlik = data.get('agirlik')
     dayibasi_id = data.get('dayibasi_id')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     try:
         dayibasi_id = int(dayibasi_id)
         agirlik = float(agirlik)
@@ -1135,6 +1369,13 @@ def add_jti_scv_dizim_agirlik():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - dayibasi_id'nin region'ı ile eşleşmeli
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
         cursor.execute("INSERT INTO jti_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
@@ -1146,13 +1387,22 @@ def add_jti_scv_dizim_agirlik():
 @app.route('/api/jti_scv_dizim/agirlik/details', methods=['GET'])
 def get_jti_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
+    region = request.args.get('region')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yazici_adi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        if region:
+            cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+            dayibasi_region = cursor.fetchone()
+            if not dayibasi_region:
+                return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+            if dayibasi_region[0] != region:
+                return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
+        sql = "SELECT id, agirlik, yazici_adi, created_at FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = []
@@ -1178,8 +1428,11 @@ def add_or_update_jti_scv_dizim_gunluk():
     data = request.get_json()
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    region = data.get('region')
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     
     # Veri tipi dönüşümleri
     try:
@@ -1192,6 +1445,13 @@ def add_or_update_jti_scv_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
         # Kayıt var mı kontrol et
         cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
@@ -1217,20 +1477,41 @@ def get_pmi_scv_dizim_summary():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
-                g.diziAdedi,
-                g.yazici_adi,
-                (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
-            FROM pmi_scv_dizim_dayibasi_table d
-            LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
+        # Bölge parametresini al
+        region = request.args.get('region')
+        
+        # SQL sorgusuna bölge filtresi ekle
+        if region:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM pmi_scv_dizim_dayibasi_table d
+                LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+                WHERE d.region = %s
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''', (region,))
+        else:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM pmi_scv_dizim_dayibasi_table d
+                LEFT JOIN pmi_scv_dizim_gunluk g ON d.id = g.dayibasi_id
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''')
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
@@ -1263,17 +1544,20 @@ def add_pmi_scv_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
-    sql_insert = "INSERT INTO pmi_scv_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_scv_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s AND region = %s"
+    sql_insert = "INSERT INTO pmi_scv_dizim_dayibasi_table (tarih, dayibasi, region) VALUES (%s, %s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih'], region))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi'], region))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1287,12 +1571,22 @@ def add_pmi_scv_dizim_agirlik():
     agirlik = data.get('agirlik')
     dayibasi_id = data.get('dayibasi_id')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - dayibasi_id'nin region'ı ile eşleşmeli
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
         cursor.execute("INSERT INTO pmi_scv_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
@@ -1304,13 +1598,22 @@ def add_pmi_scv_dizim_agirlik():
 @app.route('/api/pmi_scv_dizim/agirlik/details', methods=['GET'])
 def get_pmi_scv_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
+    region = request.args.get('region')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik, yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        if region:
+            cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+            dayibasi_region = cursor.fetchone()
+            if not dayibasi_region:
+                return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+            if dayibasi_region[0] != region:
+                return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
+        sql = "SELECT id, agirlik, yazici_adi, created_at FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = []
@@ -1336,16 +1639,26 @@ def add_or_update_pmi_scv_dizim_gunluk():
     data = request.get_json()
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    region = data.get('region')
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = %s", dayibasi_id)
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
+        cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing.id))
+            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
         else:
@@ -1366,20 +1679,41 @@ def get_pmi_topping_dizim_summary():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
-                g.diziAdedi,
-                g.yazici_adi,
-                (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
-                (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
-            FROM pmi_topping_dizim_dayibasi_table d
-            LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
-            ORDER BY d.tarih DESC, d.dayibasi
-        ''')
+        # Bölge parametresini al
+        region = request.args.get('region')
+        
+        # SQL sorgusuna bölge filtresi ekle
+        if region:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM pmi_topping_dizim_dayibasi_table d
+                LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
+                WHERE d.region = %s
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''', (region,))
+        else:
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
+                    g.diziAdedi,
+                    g.yazici_adi,
+                    (SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as girilenAgirlikSayisi,
+                    (SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id) as ortalamaAgirlik
+                FROM pmi_topping_dizim_dayibasi_table d
+                LEFT JOIN pmi_topping_dizim_gunluk g ON d.id = g.dayibasi_id
+                ORDER BY d.tarih DESC, d.dayibasi
+            ''')
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
@@ -1412,17 +1746,20 @@ def add_pmi_topping_dizim_dayibasi():
     required = ['tarih', 'dayibasi']
     if not all(k in data for k in required):
         return jsonify({'message': 'tarih ve dayibasi zorunludur.'}), 400
-    sql_check = "SELECT id FROM pmi_topping_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s"
-    sql_insert = "INSERT INTO pmi_topping_dizim_dayibasi_table (tarih, dayibasi) VALUES (%s, %s)"
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    sql_check = "SELECT id FROM pmi_topping_dizim_dayibasi_table WHERE dayibasi = %s AND tarih = %s AND region = %s"
+    sql_insert = "INSERT INTO pmi_topping_dizim_dayibasi_table (tarih, dayibasi, region) VALUES (%s, %s, %s)"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute(sql_check, (data['dayibasi'], data['tarih']))
+        cursor.execute(sql_check, (data['dayibasi'], data['tarih'], region))
         existing = cursor.fetchone()
         if existing:
             return jsonify({'message': 'Bu dayıbaşı ve tarihe ait kayıt zaten var.'}), 409
-        cursor.execute(sql_insert, (data['tarih'], data['dayibasi']))
+        cursor.execute(sql_insert, (data['tarih'], data['dayibasi'], region))
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
@@ -1436,12 +1773,22 @@ def add_pmi_topping_dizim_agirlik():
     agirlik = data.get('agirlik')
     dayibasi_id = data.get('dayibasi_id')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik or not dayibasi_id:
         return jsonify({'message': 'dayibasi_id ve agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - dayibasi_id'nin region'ı ile eşleşmeli
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
         cursor.execute("INSERT INTO pmi_topping_dizim_agirlik (dayibasi_id, agirlik, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, agirlik, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
@@ -1453,13 +1800,22 @@ def add_pmi_topping_dizim_agirlik():
 @app.route('/api/pmi_topping_dizim/agirlik/details', methods=['GET'])
 def get_pmi_topping_dizim_agirlik_details():
     dayibasi_id = request.args.get('dayibasi_id')
+    region = request.args.get('region')
     if not dayibasi_id:
         return jsonify({'message': 'dayibasi_id parametresi zorunludur.'}), 400
-    sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        if region:
+            cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+            dayibasi_region = cursor.fetchone()
+            if not dayibasi_region:
+                return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+            if dayibasi_region[0] != region:
+                return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
+        sql = "SELECT id, agirlik,yazici_adi, created_at FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id"
         cursor.execute(sql, (dayibasi_id,))
         columns = [column[0] for column in cursor.description]
         results = []
@@ -1485,12 +1841,22 @@ def add_or_update_pmi_topping_dizim_gunluk():
     data = request.get_json()
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
+    region = data.get('region')
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region:
+            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
+        if dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
         cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
@@ -1576,6 +1942,9 @@ def add_scv_sera():
     required_fields = ['sera_yeri', 'alan', 'sera_no', 'dizi_sayisi', 'dizi_kg1', 'dizi_kg2', 'dizi_kg3', 'dizi_kg4', 'dizi_kg5', 'dizi_kg6']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -1584,14 +1953,14 @@ def add_scv_sera():
         sql = """
         INSERT INTO scv_sera (
             sera_yeri, alan, sera_no, dizi_sayisi, dizi_kg1, dizi_kg2, dizi_kg3, dizi_kg4, dizi_kg5, dizi_kg6,
-            el_grubu, soldurma_giris_tarihi, soldurma_bitis_tarihi
+            el_grubu, soldurma_giris_tarihi, soldurma_bitis_tarihi, region
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             data['sera_yeri'], data['alan'], data['sera_no'], data['dizi_sayisi'],
             data['dizi_kg1'], data['dizi_kg2'], data['dizi_kg3'], data['dizi_kg4'], data['dizi_kg5'], data['dizi_kg6'],
-            data.get('el_grubu'), data.get('soldurma_giris_tarihi'), data.get('soldurma_bitis_tarihi')
+            data.get('el_grubu'), data.get('soldurma_giris_tarihi'), data.get('soldurma_bitis_tarihi'), region
         )
         cursor.execute(sql, params)
         conn.commit()
@@ -1609,7 +1978,11 @@ def get_scv_seralar():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM scv_sera WHERE region = %s ORDER BY id DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1721,19 +2094,22 @@ def add_scv_kutulama():
     required_fields = ['tarih', 'dayibasi', 'sera_yeri', 'sera_no', 'sera_yas_kg', 'kutular', 'toplam_kuru_kg', 'yas_kuru_orani', 'alan']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan, yazici_adi, sera_bosaltildi)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO scv_kutulama (tarih, dayibasi, sera_yeri, sera_no, sera_yas_kg, kutular, toplam_kuru_kg, yas_kuru_orani, alan, yazici_adi, sera_bosaltildi, region)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             data['tarih'], data['dayibasi'], data['sera_yeri'], data['sera_no'], 
             data['sera_yas_kg'], data['kutular'], data['toplam_kuru_kg'], data['yas_kuru_orani'],
-            data.get('alan'), data.get('yazici_adi'), data.get('sera_bosaltildi', 'hayir')
+            data.get('alan'), data.get('yazici_adi'), data.get('sera_bosaltildi', 'hayir'), region
         )
         cursor.execute(sql, params)
         # Eğer sera boşaltıldıysa, scv_sera tablosunda dizi_sayisi=0 ve bosaltma_tarihi güncellenmeli
@@ -1758,7 +2134,11 @@ def get_scv_kutulama():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scv_kutulama ORDER BY tarih DESC, id DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM scv_kutulama WHERE region = %s ORDER BY tarih DESC, id DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM scv_kutulama ORDER BY tarih DESC, id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1775,7 +2155,11 @@ def get_scv_kutulama_by_date(tarih):
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = %s ORDER BY id DESC", tarih)
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = %s AND region = %s ORDER BY id DESC", (tarih, region))
+        else:
+            cursor.execute("SELECT * FROM scv_kutulama WHERE tarih = %s ORDER BY id DESC", (tarih,))
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -1798,7 +2182,11 @@ def get_scv_kutulama_summary():
     
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama WHERE region = %s", (region,))
+        else:
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         kutulama_kayitlari = cursor.fetchall()
         
         # İstatistikleri tutacak sözlükler
@@ -1878,13 +2266,23 @@ def bosalt_scv_sera():
     data = request.json
     sera_id = data.get('id')
     tarih = data.get('tarih') or datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    region = data.get('region')
     if not sera_id:
         return jsonify({'error': 'Sera id gerekli'}), 400
+    if not region:
+        return jsonify({'error': 'region parametresi zorunludur'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'error': 'Veritabanı bağlantı hatası'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM scv_sera WHERE id = %s", (sera_id,))
+        sera_region = cursor.fetchone()
+        if not sera_region:
+            return jsonify({'error': 'Sera kaydı bulunamadı'}), 404
+        if sera_region[0] != region:
+            return jsonify({'error': 'Bölge uyuşmazlığı'}), 403
         cursor.execute("""
             UPDATE scv_sera
             SET dizi_sayisi=0, bosaltma_tarihi=%s
@@ -1912,10 +2310,14 @@ def get_alan_stok():
     
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        region = request.args.get('region')
         alanlar = {}
         
-        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla (bölge filtresi ile)
+        if region:
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama WHERE region = %s", (region,))
+        else:
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         scv_rows = cursor.fetchall()
         
         for row in scv_rows:
@@ -1947,8 +2349,16 @@ def get_alan_stok():
             alanlar[alan_key]['kutu'] += kutu_sayisi
             alanlar[alan_key]['kg'] += toplam_kg
         
-        # İzmir kutulama verilerini al - ayrı tablo
-        cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
+        # İzmir kutulama verilerini al - ayrı tablo (bölge filtresi ile)
+        try:
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'izmir_kutulama' AND column_name = 'region'")
+            has_region = cursor.fetchone()
+            if has_region and region:
+                cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama WHERE region = %s", (region,))
+            else:
+                cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
+        except:
+            cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -1981,12 +2391,16 @@ def add_sevkiyat():
     istenen_kg = float(data.get('kg', 0))
     alan_input = data.get('alan', '').strip()
     tarih = data.get('tarih', datetime.now().strftime('%Y-%m-%d'))
+    region = data.get('region')
     
     if not alan_input:
         return jsonify({'message': 'Alan bilgisi gerekli.'}), 400
     
     if istenen_kutu <= 0 or istenen_kg <= 0:
         return jsonify({'message': 'Kutu ve KG değerleri 0\'dan büyük olmalı.'}), 400
+    
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     
     # Frontend'den gelen alan adını normalize et (küçük harf, tire -> büyük harf, boşluk)
     alan_mapping = {
@@ -2011,8 +2425,8 @@ def add_sevkiyat():
         cursor = conn.cursor()
         alanlar = {}
         
-        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla
-        cursor.execute("SELECT id, alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+        # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla (bölge filtresi ile)
+        cursor.execute("SELECT id, alan, kutular, toplam_kuru_kg FROM scv_kutulama WHERE region = %s", (region,))
         scv_rows = cursor.fetchall()
         
         for row in scv_rows:
@@ -2050,8 +2464,17 @@ def add_sevkiyat():
                 'original_alan': row_alan  # Orijinal alan adını sakla güncelleme için
             })
         
-        # İzmir kutulama verilerini al
-        cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
+        # İzmir kutulama verilerini al (bölge filtresi ile - izmir_kutulama tablosunda region kolonu varsa)
+        # Not: izmir_kutulama tablosunda region kolonu olmayabilir, kontrol et
+        try:
+            cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'izmir_kutulama' AND column_name = 'region'")
+            has_region = cursor.fetchone()
+            if has_region:
+                cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama WHERE region = %s", (region,))
+            else:
+                cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
+        except:
+            cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -2172,8 +2595,8 @@ def add_sevkiyat():
         
         # Sevkiyat kaydını ekle
         cursor.execute(
-            "INSERT INTO sevkiyat (tarih, alan, kutu, kg, created_at) VALUES (%s, %s, %s, %s, %s)",
-            (tarih, alan, istenen_kutu, istenen_kg, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            "INSERT INTO sevkiyat (tarih, alan, kutu, kg, created_at, region) VALUES (%s, %s, %s, %s, %s, %s)",
+            (tarih, alan, istenen_kutu, istenen_kg, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), region)
         )
         
         conn.commit()
@@ -2194,7 +2617,11 @@ def get_sevkiyat():
     
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM sevkiyat ORDER BY created_at DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM sevkiyat WHERE region = %s ORDER BY created_at DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM sevkiyat ORDER BY created_at DESC")
         rows = cursor.fetchall()
         
         sevkiyatlar = []
@@ -2428,13 +2855,26 @@ def update_fcv_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den gunlukId'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT gunlukId FROM fcv_kirim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        gunluk_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM fcv_kirim_gunluk WHERE id = %s", (gunluk_id,))
+        gunluk_region = cursor.fetchone()
+        if not gunluk_region or gunluk_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE fcv_kirim_agirlik SET agirlik = %s, yazici_adi = %s WHERE id = %s", (agirlik, yazici_adi, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2497,13 +2937,23 @@ def update_fcv_kirim_gunluk(gunluk_id):
     data = request.get_json()
     bohcaSayisi = data.get('bocaSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if bohcaSayisi is None:
         return jsonify({'message': 'bocaSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM fcv_kirim_gunluk WHERE id = %s", (gunluk_id,))
+        gunluk_region = cursor.fetchone()
+        if not gunluk_region:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        if gunluk_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE fcv_kirim_gunluk SET bocaSayisi = %s, yazici_adi = %s WHERE id = %s", (bohcaSayisi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2541,13 +2991,26 @@ def update_jti_scv_dizim_gunluk(gunluk_id):
     data = request.get_json()
     diziAdedi = data.get('diziAdedi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if diziAdedi is None:
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - gunluk_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM jti_scv_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        gunluk_record = cursor.fetchone()
+        if not gunluk_record:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        dayibasi_id = gunluk_record[0]
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2563,13 +3026,26 @@ def update_pmi_scv_dizim_gunluk(gunluk_id):
     data = request.get_json()
     diziAdedi = data.get('diziAdedi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if diziAdedi is None:
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - gunluk_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_scv_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        gunluk_record = cursor.fetchone()
+        if not gunluk_record:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        dayibasi_id = gunluk_record[0]
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2585,13 +3061,26 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
     data = request.get_json()
     diziAdedi = data.get('diziAdedi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if diziAdedi is None:
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - gunluk_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_topping_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        gunluk_record = cursor.fetchone()
+        if not gunluk_record:
+            return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
+        dayibasi_id = gunluk_record[0]
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, gunluk_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2608,13 +3097,26 @@ def update_pmi_scv_dizim_agirlik(agirlik_id):
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         if yaprakSayisi is not None:
             cursor.execute("UPDATE pmi_scv_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
@@ -2634,13 +3136,26 @@ def update_jti_scv_dizim_agirlik(agirlik_id):
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM jti_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         if yaprakSayisi is not None:
             cursor.execute("UPDATE jti_scv_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
@@ -2660,13 +3175,26 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
     agirlik = data.get('agirlik')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_topping_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         if yaprakSayisi is not None:
             cursor.execute("UPDATE pmi_topping_dizim_agirlik SET agirlik = %s, yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (agirlik, yaprakSayisi, yazici_adi, agirlik_id))
         else:
@@ -2686,12 +3214,25 @@ def add_jti_scv_dizim_yaprak():
     agirlik_id = data.get('agirlik_id')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik_id or yaprakSayisi is None:
         return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM jti_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("INSERT INTO jti_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
@@ -2705,12 +3246,30 @@ def update_jti_scv_dizim_yaprak(yaprak_id):
     data = request.get_json()
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if yaprakSayisi is None:
         return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - yaprak_id'den agirlik_id'yi bul, sonra dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT agirlik_id FROM jti_scv_dizim_yaprak WHERE id = %s", (yaprak_id,))
+        yaprak_record = cursor.fetchone()
+        if not yaprak_record:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        agirlik_id = yaprak_record[0]
+        cursor.execute("SELECT dayibasi_id FROM jti_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE jti_scv_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2727,12 +3286,25 @@ def add_pmi_scv_dizim_yaprak():
     agirlik_id = data.get('agirlik_id')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik_id or yaprakSayisi is None:
         return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("INSERT INTO pmi_scv_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
@@ -2746,12 +3318,30 @@ def update_pmi_scv_dizim_yaprak(yaprak_id):
     data = request.get_json()
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if yaprakSayisi is None:
         return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - yaprak_id'den agirlik_id'yi bul, sonra dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT agirlik_id FROM pmi_scv_dizim_yaprak WHERE id = %s", (yaprak_id,))
+        yaprak_record = cursor.fetchone()
+        if not yaprak_record:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        agirlik_id = yaprak_record[0]
+        cursor.execute("SELECT dayibasi_id FROM pmi_scv_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE pmi_scv_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2768,12 +3358,25 @@ def add_pmi_topping_dizim_yaprak():
     agirlik_id = data.get('agirlik_id')
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if not agirlik_id or yaprakSayisi is None:
         return jsonify({'message': 'agirlik_id ve yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT dayibasi_id FROM pmi_topping_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("INSERT INTO pmi_topping_dizim_yaprak (agirlik_id, yaprakSayisi, yazici_adi) VALUES (%s, %s, %s)", (agirlik_id, yaprakSayisi, yazici_adi))
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
@@ -2787,12 +3390,30 @@ def update_pmi_topping_dizim_yaprak(yaprak_id):
     data = request.get_json()
     yaprakSayisi = data.get('yaprakSayisi')
     yazici_adi = data.get('yazici_adi')
+    region = data.get('region')
     if yaprakSayisi is None:
         return jsonify({'message': 'yaprakSayisi zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - yaprak_id'den agirlik_id'yi bul, sonra dayibasi_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT agirlik_id FROM pmi_topping_dizim_yaprak WHERE id = %s", (yaprak_id,))
+        yaprak_record = cursor.fetchone()
+        if not yaprak_record:
+            return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
+        agirlik_id = yaprak_record[0]
+        cursor.execute("SELECT dayibasi_id FROM pmi_topping_dizim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        dayibasi_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM pmi_topping_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
+        dayibasi_region = cursor.fetchone()
+        if not dayibasi_region or dayibasi_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE pmi_topping_dizim_yaprak SET yaprakSayisi = %s, yazici_adi = %s WHERE id = %s", (yaprakSayisi, yazici_adi, yaprak_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2810,17 +3431,20 @@ def add_traktor_gelis_jti_kirim():
     required_fields = ['tarih', 'plaka', 'gelis_no']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO traktor_gelis_jti_kirim (tarih, plaka, gelis_no)
-        VALUES (%s, %s, %s)
+        INSERT INTO traktor_gelis_jti_kirim (tarih, plaka, gelis_no, region)
+        VALUES (%s, %s, %s, %s)
         """
         params = (
-            data['tarih'], data['plaka'], data['gelis_no']
+            data['tarih'], data['plaka'], data['gelis_no'], region
         )
         cursor.execute(sql, params)
         conn.commit()
@@ -2854,11 +3478,21 @@ def add_traktor_gelis_jti_kirim_dayibasi():
     required_fields = ['traktor_gelis_jti_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_jti_kirim WHERE id = %s", (data['traktor_gelis_jti_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_jti_kirim_dayibasi (traktor_gelis_jti_kirim_id, dayibasi_adi, bohca_sayisi)
         VALUES (%s, %s, %s)
@@ -2898,11 +3532,21 @@ def add_traktor_gelis_jti_kirim_agirlik():
     required_fields = ['traktor_gelis_jti_kirim_id', 'agirlik', 'created_at']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_jti_kirim WHERE id = %s", (data['traktor_gelis_jti_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_jti_kirim_agirlik (traktor_gelis_jti_kirim_id, agirlik, created_at)
         VALUES (%s, %s, %s)
@@ -2940,13 +3584,26 @@ def get_traktor_gelis_jti_kirim_agirlik():
 def update_traktor_gelis_jti_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den kart_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT traktor_gelis_jti_kirim_id FROM traktor_gelis_jti_kirim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        kart_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM traktor_gelis_jti_kirim WHERE id = %s", (kart_id,))
+        kart_region = cursor.fetchone()
+        if not kart_region or kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE traktor_gelis_jti_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -2965,7 +3622,11 @@ def get_traktor_gelis_jti_kirim_summary():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi WHERE traktor_gelis_jti_kirim_id = %s", (kart['id'],))
@@ -2994,17 +3655,20 @@ def add_traktor_gelis_pmi_kirim():
     required_fields = ['tarih', 'plaka', 'gelis_no']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO traktor_gelis_pmi_kirim (tarih, plaka, gelis_no)
-        VALUES (%s, %s, %s)
+        INSERT INTO traktor_gelis_pmi_kirim (tarih, plaka, gelis_no, region)
+        VALUES (%s, %s, %s, %s)
         """
         params = (
-            data['tarih'], data['plaka'], data['gelis_no']
+            data['tarih'], data['plaka'], data['gelis_no'], region
         )
         cursor.execute(sql, params)
         conn.commit()
@@ -3038,11 +3702,21 @@ def add_traktor_gelis_pmi_kirim_dayibasi():
     required_fields = ['traktor_gelis_pmi_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_kirim WHERE id = %s", (data['traktor_gelis_pmi_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_pmi_kirim_dayibasi (traktor_gelis_pmi_kirim_id, dayibasi_adi, bohca_sayisi)
         VALUES (%s, %s, %s)
@@ -3082,11 +3756,21 @@ def add_traktor_gelis_pmi_kirim_agirlik():
     required_fields = ['traktor_gelis_pmi_kirim_id', 'agirlik', 'created_at']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_kirim WHERE id = %s", (data['traktor_gelis_pmi_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_pmi_kirim_agirlik (traktor_gelis_pmi_kirim_id, agirlik, created_at)
         VALUES (%s, %s, %s)
@@ -3124,13 +3808,26 @@ def get_traktor_gelis_pmi_kirim_agirlik():
 def update_traktor_gelis_pmi_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den kart_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT traktor_gelis_pmi_kirim_id FROM traktor_gelis_pmi_kirim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        kart_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_kirim WHERE id = %s", (kart_id,))
+        kart_region = cursor.fetchone()
+        if not kart_region or kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE traktor_gelis_pmi_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -3149,7 +3846,11 @@ def get_traktor_gelis_pmi_kirim_summary():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim_dayibasi WHERE traktor_gelis_pmi_kirim_id = %s", (kart['id'],))
@@ -3178,17 +3879,20 @@ def add_traktor_gelis_pmi_topping_kirim():
     required_fields = ['tarih', 'plaka', 'gelis_no']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO traktor_gelis_pmi_topping_kirim (tarih, plaka, gelis_no)
-        VALUES (%s, %s, %s)
+        INSERT INTO traktor_gelis_pmi_topping_kirim (tarih, plaka, gelis_no, region)
+        VALUES (%s, %s, %s, %s)
         """
         params = (
-            data['tarih'], data['plaka'], data['gelis_no']
+            data['tarih'], data['plaka'], data['gelis_no'], region
         )
         cursor.execute(sql, params)
         conn.commit()
@@ -3222,11 +3926,21 @@ def add_traktor_gelis_pmi_topping_kirim_dayibasi():
     required_fields = ['traktor_gelis_pmi_topping_kirim_id', 'dayibasi_adi', 'bohca_sayisi']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_topping_kirim WHERE id = %s", (data['traktor_gelis_pmi_topping_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_pmi_topping_kirim_dayibasi (traktor_gelis_pmi_topping_kirim_id, dayibasi_adi, bohca_sayisi)
         VALUES (%s, %s, %s)
@@ -3266,11 +3980,21 @@ def add_traktor_gelis_pmi_topping_kirim_agirlik():
     required_fields = ['traktor_gelis_pmi_topping_kirim_id', 'agirlik', 'created_at']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_topping_kirim WHERE id = %s", (data['traktor_gelis_pmi_topping_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_pmi_topping_kirim_agirlik (traktor_gelis_pmi_topping_kirim_id, agirlik, created_at)
         VALUES (%s, %s, %s)
@@ -3308,13 +4032,26 @@ def get_traktor_gelis_pmi_topping_kirim_agirlik():
 def update_traktor_gelis_pmi_topping_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den kart_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT traktor_gelis_pmi_topping_kirim_id FROM traktor_gelis_pmi_topping_kirim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        kart_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM traktor_gelis_pmi_topping_kirim WHERE id = %s", (kart_id,))
+        kart_region = cursor.fetchone()
+        if not kart_region or kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE traktor_gelis_pmi_topping_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -3333,7 +4070,11 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim_dayibasi WHERE traktor_gelis_pmi_topping_kirim_id = %s", (kart['id'],))
@@ -3362,17 +4103,20 @@ def add_traktor_gelis_izmir_kirim():
     required_fields = ['tarih', 'plaka', 'gelis_no']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
         sql = """
-        INSERT INTO traktor_gelis_izmir_kirim (tarih, plaka, gelis_no)
-        VALUES (%s, %s, %s)
+        INSERT INTO traktor_gelis_izmir_kirim (tarih, plaka, gelis_no, region)
+        VALUES (%s, %s, %s, %s)
         """
         params = (
-            data['tarih'], data['plaka'], data['gelis_no']
+            data['tarih'], data['plaka'], data['gelis_no'], region
         )
         cursor.execute(sql, params)
         conn.commit()
@@ -3390,7 +4134,11 @@ def get_traktor_gelis_izmir_kirim():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY id DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -3419,6 +4167,16 @@ def handle_traktor_dayibasi():
             return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
         try:
             cursor = conn.cursor()
+            region = data.get('region')
+            if not region:
+                return jsonify({'message': 'region parametresi zorunludur.'}), 400
+            # Bölge kontrolü
+            cursor.execute("SELECT region FROM traktor_gelis_izmir_kirim WHERE id = %s", (data['traktor_gelis_izmir_kirim_id'],))
+            kart_region = cursor.fetchone()
+            if not kart_region:
+                return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+            if kart_region[0] != region:
+                return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
             sql = """
             INSERT INTO traktor_gelis_izmir_kirim_dayibasi (traktor_gelis_izmir_kirim_id, dayibasi_adi, bohca_sayisi)
             VALUES (%s, %s, %s)
@@ -3456,11 +4214,21 @@ def add_traktor_gelis_izmir_kirim_agirlik():
     required_fields = ['traktor_gelis_izmir_kirim_id', 'agirlik', 'created_at']
     if not all(field in data for field in required_fields):
         return jsonify({'message': 'Eksik alanlar var.'}), 400
+    region = data.get('region')
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM traktor_gelis_izmir_kirim WHERE id = %s", (data['traktor_gelis_izmir_kirim_id'],))
+        kart_region = cursor.fetchone()
+        if not kart_region:
+            return jsonify({'message': 'Kart kaydı bulunamadı.'}), 404
+        if kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı: Bu kart farklı bir bölgeye ait.'}), 403
         sql = """
         INSERT INTO traktor_gelis_izmir_kirim_agirlik (traktor_gelis_izmir_kirim_id, agirlik, created_at)
         VALUES (%s, %s, %s)
@@ -3498,13 +4266,26 @@ def get_traktor_gelis_izmir_kirim_agirlik():
 def update_traktor_gelis_izmir_kirim_agirlik(agirlik_id):
     data = request.get_json()
     agirlik = data.get('agirlik')
+    region = data.get('region')
     if agirlik is None:
         return jsonify({'message': 'agirlik zorunludur.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü - agirlik_id'den kart_id'yi bul, sonra region'ı kontrol et
+        cursor.execute("SELECT traktor_gelis_izmir_kirim_id FROM traktor_gelis_izmir_kirim_agirlik WHERE id = %s", (agirlik_id,))
+        agirlik_record = cursor.fetchone()
+        if not agirlik_record:
+            return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
+        kart_id = agirlik_record[0]
+        cursor.execute("SELECT region FROM traktor_gelis_izmir_kirim WHERE id = %s", (kart_id,))
+        kart_region = cursor.fetchone()
+        if not kart_region or kart_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE traktor_gelis_izmir_kirim_agirlik SET agirlik = %s WHERE id = %s", (agirlik, agirlik_id))
         conn.commit()
         if cursor.rowcount == 0:
@@ -3523,7 +4304,11 @@ def get_traktor_gelis_izmir_kirim_summary():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+        region = request.args.get('region')
+        if region:
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
+        else:
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = %s", (kart['id'],))
@@ -3729,11 +4514,20 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
         cursor = conn.cursor()
         
         # 1. Tüm traktör kartlarını getir
-        cursor.execute("""
-            SELECT id, tarih, plaka, gelis_no 
-            FROM traktor_gelis_izmir_kirim 
-            ORDER BY tarih DESC, plaka, gelis_no DESC
-        """)
+        region = request.args.get('region')
+        if region:
+            cursor.execute("""
+                SELECT id, tarih, plaka, gelis_no 
+                FROM traktor_gelis_izmir_kirim 
+                WHERE region = %s
+                ORDER BY tarih DESC, plaka, gelis_no DESC
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT id, tarih, plaka, gelis_no 
+                FROM traktor_gelis_izmir_kirim 
+                ORDER BY tarih DESC, plaka, gelis_no DESC
+            """)
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         
         # 2. Her kart için detayları doldur
@@ -3796,13 +4590,23 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
 def update_scv_sera_bitis_tarihi(sera_id):
     data = request.get_json()
     soldurma_bitis_tarihi = data.get('soldurma_bitis_tarihi')
+    region = data.get('region')
     if not soldurma_bitis_tarihi:
         return jsonify({'message': 'soldurma_bitis_tarihi gerekli.'}), 400
+    if not region:
+        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
+        # Bölge kontrolü
+        cursor.execute("SELECT region FROM scv_sera WHERE id = %s", (sera_id,))
+        sera_region = cursor.fetchone()
+        if not sera_region:
+            return jsonify({'message': 'Sera kaydı bulunamadı.'}), 404
+        if sera_region[0] != region:
+            return jsonify({'message': 'Bölge uyuşmazlığı.'}), 403
         cursor.execute("UPDATE scv_sera SET soldurma_bitis_tarihi = %s WHERE id = %s", (soldurma_bitis_tarihi, sera_id))
         conn.commit()
         return jsonify({'message': 'Soldurma bitiş tarihi güncellendi.'})
@@ -4409,6 +5213,12 @@ if __name__ == '__main__':
     if initialize_db():
         ensure_kutulama_alan_column()
         ensure_scv_sera_new_columns()
+        ensure_scv_dizim_region_columns()
+        ensure_scv_kirim_region_columns()
+        ensure_scv_kutulama_region_column()
+        ensure_scv_sera_region_column()
+        ensure_fcv_region_columns()
+        ensure_sevkiyat_region_column()
         print("🚀 Flask uygulaması başlatılıyor...")
         #app.run(debug=True, port=5000)
         port = int(os.environ.get("PORT", 5000))
