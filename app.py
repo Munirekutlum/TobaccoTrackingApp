@@ -918,7 +918,10 @@ def add_fcv_genel_data():
         conn.commit()
         return jsonify({'message': 'Veri başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -944,7 +947,10 @@ def get_fcv_genel_data():
         
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -998,7 +1004,10 @@ def get_kirim_summary():
                 r['toplamTahminiKg'] = 0
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1035,7 +1044,10 @@ def add_or_update_gunluk_entry():
         conn.commit()
         return jsonify({'message': 'Günlük giriş başarıyla kaydedildi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1065,7 +1077,10 @@ def add_agirlik_entry():
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1086,7 +1101,10 @@ def get_agirlik_details_by_gunlukId():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1104,7 +1122,10 @@ def delete_agirlik_entry(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla silindi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1121,7 +1142,10 @@ def get_users():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -1248,7 +1272,10 @@ def get_dolu_sergiler():
         return jsonify(results)
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -1281,7 +1308,10 @@ def bosalt_sergiler():
         return jsonify({'message': f'{len(sergi_numaralari)} sergi başarıyla boşaltıldı.'}), 200
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -1295,6 +1325,21 @@ def get_jti_scv_dizim_summary():
         cursor = conn.cursor()
         # Bölge parametresini al
         region = request.args.get('region')
+        
+        # Region kolonunun varlığını kontrol et
+        try:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'jti_scv_dizim_dayibasi_table' AND column_name = 'region'
+            """)
+            has_region = cursor.fetchone() is not None
+            if not has_region:
+                # Region kolonu yoksa ekle
+                cursor.execute("ALTER TABLE jti_scv_dizim_dayibasi_table ADD COLUMN IF NOT EXISTS region TEXT")
+                conn.commit()
+        except Exception as col_check_error:
+            print(f"Region kolonu kontrolü hatası: {col_check_error}")
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
@@ -1350,7 +1395,10 @@ def get_jti_scv_dizim_summary():
             r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"JTI SCV Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1377,7 +1425,10 @@ def add_jti_scv_dizim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1412,7 +1463,10 @@ def add_jti_scv_dizim_agirlik():
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1451,7 +1505,10 @@ def get_jti_scv_dizim_agirlik_details():
             results.append(row_dict)
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1496,7 +1553,10 @@ def add_or_update_jti_scv_dizim_gunluk():
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1511,6 +1571,21 @@ def get_pmi_scv_dizim_summary():
         cursor = conn.cursor()
         # Bölge parametresini al
         region = request.args.get('region')
+        
+        # Region kolonunun varlığını kontrol et
+        try:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'pmi_scv_dizim_dayibasi_table' AND column_name = 'region'
+            """)
+            has_region = cursor.fetchone() is not None
+            if not has_region:
+                # Region kolonu yoksa ekle
+                cursor.execute("ALTER TABLE pmi_scv_dizim_dayibasi_table ADD COLUMN IF NOT EXISTS region TEXT")
+                conn.commit()
+        except Exception as col_check_error:
+            print(f"Region kolonu kontrolü hatası: {col_check_error}")
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
@@ -1566,7 +1641,10 @@ def get_pmi_scv_dizim_summary():
             r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1593,7 +1671,10 @@ def add_pmi_scv_dizim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1623,7 +1704,10 @@ def add_pmi_scv_dizim_agirlik():
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1662,7 +1746,10 @@ def get_pmi_scv_dizim_agirlik_details():
             results.append(row_dict)
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1698,7 +1785,10 @@ def add_or_update_pmi_scv_dizim_gunluk():
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI SCV Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1713,6 +1803,21 @@ def get_pmi_topping_dizim_summary():
         cursor = conn.cursor()
         # Bölge parametresini al
         region = request.args.get('region')
+        
+        # Region kolonunun varlığını kontrol et
+        try:
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' AND table_name = 'pmi_topping_dizim_dayibasi_table' AND column_name = 'region'
+            """)
+            has_region = cursor.fetchone() is not None
+            if not has_region:
+                # Region kolonu yoksa ekle
+                cursor.execute("ALTER TABLE pmi_topping_dizim_dayibasi_table ADD COLUMN IF NOT EXISTS region TEXT")
+                conn.commit()
+        except Exception as col_check_error:
+            print(f"Region kolonu kontrolü hatası: {col_check_error}")
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
@@ -1768,7 +1873,10 @@ def get_pmi_topping_dizim_summary():
             r['agirlikDetails'] = agirlikDetails
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1795,7 +1903,10 @@ def add_pmi_topping_dizim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1825,7 +1936,10 @@ def add_pmi_topping_dizim_agirlik():
         conn.commit()
         return jsonify({'message': 'Ağırlık başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1864,7 +1978,10 @@ def get_pmi_topping_dizim_agirlik_details():
             results.append(row_dict)
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -1900,7 +2017,10 @@ def add_or_update_pmi_topping_dizim_gunluk():
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 #-----------------------------------------------------------------------------------------------------------
@@ -1998,7 +2118,10 @@ def add_scv_sera():
         conn.commit()
         return jsonify({'message': 'Sera başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2019,7 +2142,10 @@ def get_scv_seralar():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2056,7 +2182,10 @@ def get_scv_sera_yerleri():
         yerler = [row[0] for row in cursor.fetchall()]
         return jsonify(yerler)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2076,7 +2205,10 @@ def get_scv_sera_nolar():
         nolar = [row[0] for row in cursor.fetchall()]
         return jsonify(nolar)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2107,7 +2239,10 @@ def add_scv_sera_yeri():
     except psycopg2.IntegrityError:
         return jsonify({'message': 'Bu sera yeri zaten mevcut.'}), 409
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2145,7 +2280,10 @@ def get_scv_sera_yerleri_detay():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2186,7 +2324,10 @@ def add_scv_kutulama():
         conn.commit()
         return jsonify({'message': 'Kutulama kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2207,7 +2348,10 @@ def get_scv_kutulama():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2228,7 +2372,10 @@ def get_scv_kutulama_by_date(tarih):
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2419,7 +2566,10 @@ def cleanup_old_data():
         }), 200
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -2503,7 +2653,10 @@ def get_alan_stok():
         return jsonify(alanlar), 200
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -2763,7 +2916,10 @@ def get_sevkiyat():
         return jsonify(sevkiyatlar), 200
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3145,7 +3301,10 @@ def reset_sevkiyat():
         conn.commit()
         return jsonify({'message': 'Tüm sevkiyat kayıtları silindi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3180,7 +3339,10 @@ def update_fcv_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3202,7 +3364,10 @@ def update_izmir_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3226,7 +3391,10 @@ def update_pmi_topping_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3259,7 +3427,10 @@ def update_fcv_kirim_gunluk(gunluk_id):
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3281,7 +3452,10 @@ def update_izmir_kirim_gunluk(gunluk_id):
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3316,7 +3490,10 @@ def update_jti_scv_dizim_gunluk(gunluk_id):
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3351,7 +3528,10 @@ def update_pmi_scv_dizim_gunluk(gunluk_id):
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3386,7 +3566,10 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3425,7 +3608,10 @@ def update_pmi_scv_dizim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3464,7 +3650,10 @@ def update_jti_scv_dizim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3503,7 +3692,10 @@ def update_pmi_topping_dizim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3536,7 +3728,10 @@ def add_jti_scv_dizim_yaprak():
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3575,7 +3770,10 @@ def update_jti_scv_dizim_yaprak(yaprak_id):
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3608,7 +3806,10 @@ def add_pmi_scv_dizim_yaprak():
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3647,7 +3848,10 @@ def update_pmi_scv_dizim_yaprak(yaprak_id):
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3680,7 +3884,10 @@ def add_pmi_topping_dizim_yaprak():
         conn.commit()
         return jsonify({'message': 'Yaprak sayısı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3719,7 +3926,10 @@ def update_pmi_topping_dizim_yaprak(yaprak_id):
             return jsonify({'message': 'Yaprak kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Yaprak sayısı başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         conn.close()
 
@@ -3749,7 +3959,10 @@ def add_traktor_gelis_jti_kirim():
         conn.commit()
         return jsonify({'message': 'Türücü gelis kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3766,7 +3979,10 @@ def get_traktor_gelis_jti_kirim():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3803,7 +4019,10 @@ def add_traktor_gelis_jti_kirim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Türücü gelis dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3820,7 +4039,10 @@ def get_traktor_gelis_jti_kirim_dayibasi():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3857,7 +4079,10 @@ def add_traktor_gelis_jti_kirim_agirlik():
         conn.commit()
         return jsonify({'message': 'Türücü gelis ağırlık kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3874,7 +4099,10 @@ def get_traktor_gelis_jti_kirim_agirlik():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3909,7 +4137,10 @@ def update_traktor_gelis_jti_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3942,7 +4173,10 @@ def get_traktor_gelis_jti_kirim_summary():
             kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
         return jsonify(kartlar)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3973,7 +4207,10 @@ def add_traktor_gelis_pmi_kirim():
         conn.commit()
         return jsonify({'message': 'Traktör geliş kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -3990,7 +4227,10 @@ def get_traktor_gelis_pmi_kirim():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4027,7 +4267,10 @@ def add_traktor_gelis_pmi_kirim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Traktör geliş dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4044,7 +4287,10 @@ def get_traktor_gelis_pmi_kirim_dayibasi():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4081,7 +4327,10 @@ def add_traktor_gelis_pmi_kirim_agirlik():
         conn.commit()
         return jsonify({'message': 'Traktör geliş ağırlık kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4098,7 +4347,10 @@ def get_traktor_gelis_pmi_kirim_agirlik():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4133,7 +4385,10 @@ def update_traktor_gelis_pmi_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4166,7 +4421,10 @@ def get_traktor_gelis_pmi_kirim_summary():
             kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
         return jsonify(kartlar)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4197,7 +4455,10 @@ def add_traktor_gelis_pmi_topping_kirim():
         conn.commit()
         return jsonify({'message': 'Traktör geliş kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4214,7 +4475,10 @@ def get_traktor_gelis_pmi_topping_kirim():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4251,7 +4515,10 @@ def add_traktor_gelis_pmi_topping_kirim_dayibasi():
         conn.commit()
         return jsonify({'message': 'Traktör geliş dayıbaşı kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4268,7 +4535,10 @@ def get_traktor_gelis_pmi_topping_kirim_dayibasi():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4305,7 +4575,10 @@ def add_traktor_gelis_pmi_topping_kirim_agirlik():
         conn.commit()
         return jsonify({'message': 'Traktör geliş ağırlık kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4322,7 +4595,10 @@ def get_traktor_gelis_pmi_topping_kirim_agirlik():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4357,7 +4633,10 @@ def update_traktor_gelis_pmi_topping_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4390,7 +4669,10 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
             kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
         return jsonify(kartlar)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4421,7 +4703,10 @@ def add_traktor_gelis_izmir_kirim():
         conn.commit()
         return jsonify({'message': 'Traktör geliş kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4442,7 +4727,10 @@ def get_traktor_gelis_izmir_kirim():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4539,7 +4827,10 @@ def add_traktor_gelis_izmir_kirim_agirlik():
         conn.commit()
         return jsonify({'message': 'Traktör geliş ağırlık kaydı başarıyla eklendi.'}), 201
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4556,7 +4847,10 @@ def get_traktor_gelis_izmir_kirim_agirlik():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4591,7 +4885,10 @@ def update_traktor_gelis_izmir_kirim_agirlik(agirlik_id):
             return jsonify({'message': 'Ağırlık kaydı bulunamadı.'}), 404
         return jsonify({'message': 'Ağırlık başarıyla güncellendi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4624,7 +4921,10 @@ def get_traktor_gelis_izmir_kirim_summary():
             kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
         return jsonify(kartlar)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4703,7 +5003,10 @@ def add_or_update_sergi_kiriz():
         return jsonify({'message': message}), 201
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4730,7 +5033,10 @@ def get_incomplete_sergi_kiriz():
         return jsonify(results)
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4798,7 +5104,10 @@ def get_sergi_detay(sergi_no):
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4880,7 +5189,10 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
         return jsonify(kartlar)
         
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4910,7 +5222,10 @@ def update_scv_sera_bitis_tarihi(sera_id):
         conn.commit()
         return jsonify({'message': 'Soldurma bitiş tarihi güncellendi.'})
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
@@ -4944,7 +5259,10 @@ def get_jti_scv_kutulama_summary():
             r['kutu_sayisi'] = len(r['kuruKgList'])
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -4979,7 +5297,10 @@ def get_pmi_topping_kutulama_summary():
             r['kutu_sayisi'] = len(r['kuruKgList'])
         return jsonify(results)
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
 
@@ -5305,7 +5626,10 @@ def delete_admin_user(user_id):
         
         return jsonify({'message': 'Kullanıcı başarıyla silindi.'}), 200
     except Exception as e:
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             conn.close()
