@@ -2981,7 +2981,11 @@ def get_genel_stok():
             'toplamlar': {
                 'SCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
                 'IZMIR': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
-                'FCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0}
+                'FCV': {'kirim_kg': 0, 'kirim_bohca': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'N_RUSTICA': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'BASMA': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'PRILEP': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0},
+                'KATERINI': {'kirim_kg': 0, 'kirim_bohca': 0, 'dizim_kg': 0, 'dizim_dizi': 0, 'kutulama_kg': 0, 'kutulama_kutu': 0}
             },
             'detaylar': {}
         }
@@ -3275,6 +3279,8 @@ def get_genel_stok():
         result['genel_toplam'] = {
             'kirim_kg': round(result['toplamlar']['SCV']['kirim_kg'] + result['toplamlar']['IZMIR']['kirim_kg'] + result['toplamlar']['FCV']['kirim_kg'], 2),
             'kirim_bohca': result['toplamlar']['SCV']['kirim_bohca'] + result['toplamlar']['IZMIR']['kirim_bohca'] + result['toplamlar']['FCV']['kirim_bohca'],
+            'dizim_kg': round(result['toplamlar']['SCV']['dizim_kg'] + result['toplamlar']['IZMIR']['dizim_kg'], 2),
+            'dizim_dizi': result['toplamlar']['SCV']['dizim_dizi'] + result['toplamlar']['IZMIR']['dizim_dizi'],
             'kutulama_kg': round(result['toplamlar']['SCV']['kutulama_kg'] + result['toplamlar']['IZMIR']['kutulama_kg'] + result['toplamlar']['FCV']['kutulama_kg'], 2),
             'kutulama_kutu': result['toplamlar']['SCV']['kutulama_kutu'] + result['toplamlar']['IZMIR']['kutulama_kutu'] + result['toplamlar']['FCV']['kutulama_kutu']
         }
