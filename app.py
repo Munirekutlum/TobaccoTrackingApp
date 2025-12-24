@@ -1378,12 +1378,23 @@ def get_jti_scv_dizim_summary():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
         for r in results:
+            # PostgreSQL column name'leri lowercase olabilir, camelCase'e çevir
+            if 'diziadedi' in r and 'diziAdedi' not in r:
+                r['diziAdedi'] = r['diziadedi']
+            if 'gunluk_id' not in r and 'gunlukid' in r:
+                r['gunluk_id'] = r['gunlukid']
+            if 'dayibasi_id' not in r and 'dayibasiid' in r:
+                r['dayibasi_id'] = r['dayibasiid']
+            
             # diziAdedi değerini açıkça yazdır (debug için)
-            print(f"DEBUG - dayibasi_id: {r.get('dayibasi_id')}, diziAdedi from DB: {r.get('diziAdedi')}, type: {type(r.get('diziAdedi'))}")
+            print(f"DEBUG - dayibasi_id: {r.get('dayibasi_id')}, diziAdedi from DB: {r.get('diziAdedi')}, diziadedi: {r.get('diziadedi')}, type: {type(r.get('diziAdedi'))}")
             
             # diziAdedi'yi integer olarak ayarla, None ise None olarak bırak
-            if r.get('diziAdedi') is not None:
-                r['diziAdedi'] = int(r['diziAdedi'])
+            diziAdediValue = r.get('diziAdedi') or r.get('diziadedi')
+            if diziAdediValue is not None:
+                r['diziAdedi'] = int(diziAdediValue)
+            else:
+                r['diziAdedi'] = None
             
             # Tahmini toplam hesapla
             ortalamaAgirlik = r.get('ortalamaAgirlik') or 0
