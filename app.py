@@ -1343,14 +1343,14 @@ def get_jti_scv_dizim_summary():
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
-        cursor.execute('''
-            SELECT 
-                d.id as dayibasi_id,
-                d.tarih,
-                d.dayibasi,
-                g.id as gunluk_id,
+            cursor.execute('''
+                SELECT 
+                    d.id as dayibasi_id,
+                    d.tarih,
+                    d.dayibasi,
+                    g.id as gunluk_id,
                     COALESCE(g.diziAdedi, 0) as diziAdedi,
-                g.yazici_adi,
+                    g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
                 FROM jti_scv_dizim_dayibasi_table d
