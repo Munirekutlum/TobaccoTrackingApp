@@ -1537,6 +1537,10 @@ def add_or_update_jti_scv_dizim_gunluk():
     except (ValueError, TypeError):
         return jsonify({'message': 'dayibasi_id ve diziAdedi integer olmalıdır.'}), 400
     
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -1789,6 +1793,18 @@ def add_or_update_pmi_scv_dizim_gunluk():
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     if not region:
         return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id ve diziAdedi integer olmalıdır.'}), 400
+    
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -2040,6 +2056,18 @@ def add_or_update_pmi_topping_dizim_gunluk():
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     if not region:
         return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümleri
+    try:
+        dayibasi_id = int(dayibasi_id)
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'dayibasi_id ve diziAdedi integer olmalıdır.'}), 400
+    
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
@@ -3689,6 +3717,17 @@ def update_jti_scv_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
     if not region:
         return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümü
+    try:
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'diziAdedi integer olmalıdır.'}), 400
+    
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -3708,7 +3747,11 @@ def update_jti_scv_dizim_gunluk(gunluk_id):
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
-        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+        # Kayıt sonrası doğrulama
+        cursor.execute("SELECT diziAdedi FROM jti_scv_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        verify = cursor.fetchone()
+        print(f"JTI SCV Dizim - UPDATE PUT: gunluk_id={gunluk_id}, diziAdedi={diziAdedi}, kaydedilen={verify[0] if verify else 'None'}")
+        return jsonify({'message': 'Günlük başarıyla güncellendi.', 'diziAdedi': diziAdedi}), 200
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
@@ -3727,6 +3770,17 @@ def update_pmi_scv_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
     if not region:
         return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümü
+    try:
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'diziAdedi integer olmalıdır.'}), 400
+    
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -3746,7 +3800,11 @@ def update_pmi_scv_dizim_gunluk(gunluk_id):
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
-        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+        # Kayıt sonrası doğrulama
+        cursor.execute("SELECT diziAdedi FROM pmi_scv_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        verify = cursor.fetchone()
+        print(f"PMI SCV Dizim - UPDATE PUT: gunluk_id={gunluk_id}, diziAdedi={diziAdedi}, kaydedilen={verify[0] if verify else 'None'}")
+        return jsonify({'message': 'Günlük başarıyla güncellendi.', 'diziAdedi': diziAdedi}), 200
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
@@ -3765,6 +3823,17 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
         return jsonify({'message': 'diziAdedi zorunludur.'}), 400
     if not region:
         return jsonify({'message': 'region parametresi zorunludur.'}), 400
+    
+    # Veri tipi dönüşümü
+    try:
+        diziAdedi = int(diziAdedi)
+    except (ValueError, TypeError):
+        return jsonify({'message': 'diziAdedi integer olmalıdır.'}), 400
+    
+    # diziAdedi 0 olamaz kontrolü
+    if diziAdedi <= 0:
+        return jsonify({'message': 'diziAdedi 0\'dan büyük olmalıdır.'}), 400
+    
     conn = get_db_connection()
     if not conn:
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
@@ -3784,7 +3853,11 @@ def update_pmi_topping_dizim_gunluk(gunluk_id):
         conn.commit()
         if cursor.rowcount == 0:
             return jsonify({'message': 'Günlük kaydı bulunamadı.'}), 404
-        return jsonify({'message': 'Günlük başarıyla güncellendi.'}), 200
+        # Kayıt sonrası doğrulama
+        cursor.execute("SELECT diziAdedi FROM pmi_topping_dizim_gunluk WHERE id = %s", (gunluk_id,))
+        verify = cursor.fetchone()
+        print(f"PMI Topping Dizim - UPDATE PUT: gunluk_id={gunluk_id}, diziAdedi={diziAdedi}, kaydedilen={verify[0] if verify else 'None'}")
+        return jsonify({'message': 'Günlük başarıyla güncellendi.', 'diziAdedi': diziAdedi}), 200
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
