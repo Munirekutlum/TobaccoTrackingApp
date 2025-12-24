@@ -3268,7 +3268,7 @@ def get_genel_stok():
         if region:
             cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0 AND region = %s", (region,))
         else:
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
         scv_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['SCV']['kutulama_kg'] += float(scv_kutulama_kg)
 
@@ -3406,14 +3406,14 @@ def get_genel_stok():
                 WHERE fa.agirlik > 0 AND fg.region = %s
             """, (region,))
         else:
-        cursor.execute("""
-            SELECT 
-                COALESCE(SUM(fa.agirlik), 0) as kg, 
-                COALESCE(SUM(fg.bocaSayisi), 0) as bohca
-            FROM fcv_kirim_gunluk fg
-            LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
-            WHERE fa.agirlik > 0
-        """)
+            cursor.execute("""
+                SELECT 
+                    COALESCE(SUM(fa.agirlik), 0) as kg, 
+                    COALESCE(SUM(fg.bocaSayisi), 0) as bohca
+                FROM fcv_kirim_gunluk fg
+                LEFT JOIN fcv_kirim_agirlik fa ON fg.id = fa.gunlukId
+                WHERE fa.agirlik > 0
+            """)
         fcv_kirim = cursor.fetchone()
         result['toplamlar']['FCV']['kirim_kg'] = float(fcv_kirim[0])
         result['toplamlar']['FCV']['kirim_bohca'] = int(fcv_kirim[1])
@@ -4872,7 +4872,7 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim_dayibasi WHERE traktor_gelis_pmi_topping_kirim_id = %s", (kart['id'],))
@@ -4942,7 +4942,7 @@ def get_traktor_gelis_izmir_kirim():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY id DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -5124,7 +5124,7 @@ def get_traktor_gelis_izmir_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = %s", (kart['id'],))
@@ -5351,11 +5351,11 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
                 ORDER BY tarih DESC, plaka, gelis_no DESC
             """, (region,))
         else:
-        cursor.execute("""
-            SELECT id, tarih, plaka, gelis_no 
-            FROM traktor_gelis_izmir_kirim 
-            ORDER BY tarih DESC, plaka, gelis_no DESC
-        """)
+            cursor.execute("""
+                SELECT id, tarih, plaka, gelis_no 
+                FROM traktor_gelis_izmir_kirim 
+                ORDER BY tarih DESC, plaka, gelis_no DESC
+            """)
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         
         # 2. Her kart için detayları doldur
