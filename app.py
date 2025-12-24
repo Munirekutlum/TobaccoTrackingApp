@@ -1377,7 +1377,11 @@ def get_jti_scv_dizim_summary():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
             ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
-            diziAdedi = r.get('diziAdedi', 0) or 0
+            # diziAdedi 0 da geçerli bir değer olabilir, sadece null/None kontrolü yap
+            diziAdedi = r.get('diziAdedi')
+            if diziAdedi is None:
+                diziAdedi = 0
+            r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
             if ortalamaAgirlik and diziAdedi:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
@@ -1520,6 +1524,7 @@ def add_or_update_jti_scv_dizim_gunluk():
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
     region = data.get('region')
+    yazici_adi = data.get('yazici_adi', '')  # yazici_adi opsiyonel, yoksa boş string
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     if not region:
@@ -1547,11 +1552,11 @@ def add_or_update_jti_scv_dizim_gunluk():
         cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
+            cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, yazici_adi))
             new_id = cursor.fetchone()[0]
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
@@ -1626,7 +1631,11 @@ def get_pmi_scv_dizim_summary():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
             ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
-            diziAdedi = r.get('diziAdedi', 0) or 0
+            # diziAdedi 0 da geçerli bir değer olabilir, sadece null/None kontrolü yap
+            diziAdedi = r.get('diziAdedi')
+            if diziAdedi is None:
+                diziAdedi = 0
+            r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
             if ortalamaAgirlik and diziAdedi:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
@@ -1764,6 +1773,7 @@ def add_or_update_pmi_scv_dizim_gunluk():
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
     region = data.get('region')
+    yazici_adi = data.get('yazici_adi', '')  # yazici_adi opsiyonel, yoksa boş string
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     if not region:
@@ -1782,11 +1792,11 @@ def add_or_update_pmi_scv_dizim_gunluk():
         cursor.execute("SELECT id FROM pmi_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
+            cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0], 'id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, yazici_adi))
             new_id = cursor.fetchone()[0]
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
@@ -1861,7 +1871,11 @@ def get_pmi_topping_dizim_summary():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
             ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
-            diziAdedi = r.get('diziAdedi', 0) or 0
+            # diziAdedi 0 da geçerli bir değer olabilir, sadece null/None kontrolü yap
+            diziAdedi = r.get('diziAdedi')
+            if diziAdedi is None:
+                diziAdedi = 0
+            r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
             if ortalamaAgirlik and diziAdedi:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
@@ -1999,6 +2013,7 @@ def add_or_update_pmi_topping_dizim_gunluk():
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
     region = data.get('region')
+    yazici_adi = data.get('yazici_adi', '')  # yazici_adi opsiyonel, yoksa boş string
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     if not region:
@@ -2017,11 +2032,11 @@ def add_or_update_pmi_topping_dizim_gunluk():
         cursor.execute("SELECT id FROM pmi_topping_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
-            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
+            cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, yazici_adi, existing[0]))
             conn.commit()
             return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0], 'id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, yazici_adi))
             new_id = cursor.fetchone()[0]
             conn.commit()
             return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
