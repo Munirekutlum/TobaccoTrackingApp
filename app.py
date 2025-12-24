@@ -2706,7 +2706,16 @@ def get_alan_stok():
             
             try:
                 kutular_array = json.loads(kutular_json) if kutular_json else []
-                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
+                # Kutu sayısını hesapla - summary endpoint'indeki mantıkla aynı
+                kutu_sayisi = 0
+                for kutu in kutular_array:
+                    if isinstance(kutu, dict):
+                        # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                        kutu_sayisi += kutu.get('adet', 0)
+                    else:
+                        # Eski format: sadece sayı
+                        if isinstance(kutu, (int, float)) and kutu > 0:
+                            kutu_sayisi += 1
             except Exception:
                 kutu_sayisi = 0
             
