@@ -2686,7 +2686,7 @@ def get_alan_stok():
             else:
                 cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
+            cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -2805,7 +2805,7 @@ def add_sevkiyat():
             else:
                 cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
+            cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -3377,7 +3377,7 @@ def get_genel_stok():
             else:
                 cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
         except:
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
         izmir_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['IZMIR']['kutulama_kg'] = float(izmir_kutulama_kg)
 
@@ -3389,7 +3389,7 @@ def get_genel_stok():
             else:
                 cursor.execute("SELECT kutular FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT kutular FROM izmir_kutulama")
+            cursor.execute("SELECT kutular FROM izmir_kutulama")
         izmir_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['IZMIR']['kutulama_kutu'] = int(izmir_kutu_sayisi)
 
