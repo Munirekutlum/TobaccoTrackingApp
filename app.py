@@ -1396,20 +1396,28 @@ def get_jti_scv_dizim_summary():
             else:
                 r['diziAdedi'] = None
             
-            # Tahmini toplam hesapla: Ortalama Ağırlık × Dizi Adedi
+            # Tüm ağırlıkları al (sadece ilk 10 değil, hepsi)
+            cursor.execute("SELECT id, agirlik FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id", (r['dayibasi_id'],))
+            all_agirliklar = cursor.fetchall()
+            
+            # Tüm ağırlıkların toplamını hesapla
+            toplamAgirlik = sum([a[1] for a in all_agirliklar]) if all_agirliklar else 0
+            
+            # Tahmini toplam hesapla: Ortalama Ağırlık × Dizi Adedi (fallback olarak)
             ortalamaAgirlik = r.get('ortalamaAgirlik') or 0
             diziAdedi = r.get('diziAdedi')
-            # diziAdedi None değilse ve 0'dan büyükse hesapla
-            if ortalamaAgirlik and ortalamaAgirlik > 0 and diziAdedi is not None and diziAdedi > 0:
+            
+            # Öncelikle tüm ağırlıkların toplamını kullan, yoksa tahmini hesapla
+            if toplamAgirlik > 0:
+                r['toplamTahminiKg'] = toplamAgirlik
+            elif ortalamaAgirlik and ortalamaAgirlik > 0 and diziAdedi is not None and diziAdedi > 0:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
             
-            # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM jti_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
-            agirliklar = cursor.fetchall()
+            # İlk 10 agirlik ve yaprakSayisi (görüntüleme için)
             agirlikDetails = []
-            for agirlik_row in agirliklar:
+            for idx, agirlik_row in enumerate(all_agirliklar[:10]):  # İlk 10'u al
                 agirlik_id, agirlik = agirlik_row
                 cursor.execute("SELECT yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
@@ -1418,6 +1426,18 @@ def get_jti_scv_dizim_summary():
                     'yaprakSayisi': yaprak[0] if yaprak else None
                 })
             r['agirlikDetails'] = agirlikDetails
+            
+            # Tüm ağırlıkların detaylarını da ekle (frontend'de kullanmak için)
+            allAgirlikDetails = []
+            for agirlik_row in all_agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM jti_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                allAgirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['allAgirlikDetails'] = allAgirlikDetails
         
         return jsonify(results)
     except Exception as e:
@@ -1662,15 +1682,25 @@ def get_pmi_scv_dizim_summary():
             if r.get('dayibasi_id'):
                 print(f"PMI SCV Dizim Summary - dayibasi_id={r.get('dayibasi_id')}, diziAdedi={diziAdedi}, gunluk_id={r.get('gunluk_id')}")
             r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
-            if ortalamaAgirlik and diziAdedi:
+            
+            # Tüm ağırlıkları al (sadece ilk 10 değil, hepsi)
+            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id", (r['dayibasi_id'],))
+            all_agirliklar = cursor.fetchall()
+            
+            # Tüm ağırlıkların toplamını hesapla
+            toplamAgirlik = sum([a[1] for a in all_agirliklar]) if all_agirliklar else 0
+            
+            # Öncelikle tüm ağırlıkların toplamını kullan, yoksa tahmini hesapla
+            if toplamAgirlik > 0:
+                r['toplamTahminiKg'] = toplamAgirlik
+            elif ortalamaAgirlik and diziAdedi:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
-            # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM pmi_scv_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
-            agirliklar = cursor.fetchall()
+            
+            # İlk 10 agirlik ve yaprakSayisi (görüntüleme için)
             agirlikDetails = []
-            for agirlik_row in agirliklar:
+            for agirlik_row in all_agirliklar[:10]:  # İlk 10'u al
                 agirlik_id, agirlik = agirlik_row
                 cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
@@ -1679,6 +1709,18 @@ def get_pmi_scv_dizim_summary():
                     'yaprakSayisi': yaprak[0] if yaprak else None
                 })
             r['agirlikDetails'] = agirlikDetails
+            
+            # Tüm ağırlıkların detaylarını da ekle (frontend'de kullanmak için)
+            allAgirlikDetails = []
+            for agirlik_row in all_agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_scv_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                allAgirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['allAgirlikDetails'] = allAgirlikDetails
         return jsonify(results)
     except Exception as e:
         import traceback
@@ -1925,15 +1967,25 @@ def get_pmi_topping_dizim_summary():
             if r.get('dayibasi_id'):
                 print(f"PMI Topping Dizim Summary - dayibasi_id={r.get('dayibasi_id')}, diziAdedi={diziAdedi}, gunluk_id={r.get('gunluk_id')}")
             r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
-            if ortalamaAgirlik and diziAdedi:
+            
+            # Tüm ağırlıkları al (sadece ilk 10 değil, hepsi)
+            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id", (r['dayibasi_id'],))
+            all_agirliklar = cursor.fetchall()
+            
+            # Tüm ağırlıkların toplamını hesapla
+            toplamAgirlik = sum([a[1] for a in all_agirliklar]) if all_agirliklar else 0
+            
+            # Öncelikle tüm ağırlıkların toplamını kullan, yoksa tahmini hesapla
+            if toplamAgirlik > 0:
+                r['toplamTahminiKg'] = toplamAgirlik
+            elif ortalamaAgirlik and diziAdedi:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
-            # İlk 10 agirlik ve yaprakSayisi
-            cursor.execute("SELECT id, agirlik FROM pmi_topping_dizim_agirlik WHERE dayibasi_id = %s ORDER BY id LIMIT 10", (r['dayibasi_id'],))
-            agirliklar = cursor.fetchall()
+            
+            # İlk 10 agirlik ve yaprakSayisi (görüntüleme için)
             agirlikDetails = []
-            for agirlik_row in agirliklar:
+            for agirlik_row in all_agirliklar[:10]:  # İlk 10'u al
                 agirlik_id, agirlik = agirlik_row
                 cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
                 yaprak = cursor.fetchone()
@@ -1942,6 +1994,18 @@ def get_pmi_topping_dizim_summary():
                     'yaprakSayisi': yaprak[0] if yaprak else None
                 })
             r['agirlikDetails'] = agirlikDetails
+            
+            # Tüm ağırlıkların detaylarını da ekle (frontend'de kullanmak için)
+            allAgirlikDetails = []
+            for agirlik_row in all_agirliklar:
+                agirlik_id, agirlik = agirlik_row
+                cursor.execute("SELECT yaprakSayisi FROM pmi_topping_dizim_yaprak WHERE agirlik_id = %s ORDER BY id DESC LIMIT 1", (agirlik_id,))
+                yaprak = cursor.fetchone()
+                allAgirlikDetails.append({
+                    'agirlik': agirlik,
+                    'yaprakSayisi': yaprak[0] if yaprak else None
+                })
+            r['allAgirlikDetails'] = allAgirlikDetails
         return jsonify(results)
     except Exception as e:
         import traceback
@@ -5579,11 +5643,11 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
             # Ortalama ağırlık hesapla
             if kart['agirliklar']:
                 kart['ortalama_agirlik'] = sum([a['agirlik'] for a in kart['agirliklar']]) / len(kart['agirliklar'])
+                # Toplam KG = Tüm ağırlıkların toplamı (ortalama * bohça değil!)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in kart['agirliklar']])
             else:
                 kart['ortalama_agirlik'] = 0
-            
-            # Toplam kg hesapla
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+                kart['toplam_kg'] = 0
             
             # Sergileri getir (GÜNCELLENMİŞ KISIM)
             cursor.execute("""
