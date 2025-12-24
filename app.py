@@ -3021,7 +3021,7 @@ def add_sevkiyat():
                         # Eski format: sadece sayı
                         if isinstance(kutu, (int, float)) and kutu > 0:
                             row_kutu += 1
-                row_kg = izmir_row['kg']
+                row_kg = izmir_row.get('kg', 0) or 0
                 
                 if row_kutu > 0 and row_kg > 0:
                     # Bu satırdan ne kadar düşeceğimizi hesapla
@@ -3058,10 +3058,12 @@ def add_sevkiyat():
                     
                     # Veritabanını güncelle
                     yeni_kg = max(0, row_kg - dusulecek_kg)
-                    cursor.execute(
-                        "UPDATE izmir_kutulama SET kutular = %s, toplam_kuru_tutun = %s WHERE id = %s",
-                        (json.dumps(yeni_kutular), yeni_kg, izmir_row['id'])
-                    )
+                    izmir_row_id = izmir_row.get('id')
+                    if izmir_row_id:
+                        cursor.execute(
+                            "UPDATE izmir_kutulama SET kutular = %s, toplam_kuru_tutun = %s WHERE id = %s",
+                            (json.dumps(yeni_kutular), yeni_kg, izmir_row_id)
+                        )
                     
                     kalan_kutu -= dusulecek_kutu
                     kalan_kg -= dusulecek_kg
@@ -3087,7 +3089,7 @@ def add_sevkiyat():
                             # Eski format: sadece sayı
                             if isinstance(kutu, (int, float)) and kutu > 0:
                                 row_kutu += 1
-                    row_kg = scv_row['kg']
+                    row_kg = scv_row.get('kg', 0) or 0
                     
                     if row_kutu > 0 and row_kg > 0:
                         # Bu satırdan ne kadar düşeceğimizi hesapla
@@ -3124,10 +3126,12 @@ def add_sevkiyat():
                         
                         # Veritabanını güncelle
                         yeni_kg = max(0, row_kg - dusulecek_kg)
-                        cursor.execute(
-                            "UPDATE scv_kutulama SET kutular = %s, toplam_kuru_kg = %s WHERE id = %s",
-                            (json.dumps(yeni_kutular), yeni_kg, scv_row['id'])
-                        )
+                        scv_row_id = scv_row.get('id')
+                        if scv_row_id:
+                            cursor.execute(
+                                "UPDATE scv_kutulama SET kutular = %s, toplam_kuru_kg = %s WHERE id = %s",
+                                (json.dumps(yeni_kutular), yeni_kg, scv_row_id)
+                            )
                         
                         kalan_kutu -= dusulecek_kutu
                         kalan_kg -= dusulecek_kg
@@ -3147,12 +3151,14 @@ def add_sevkiyat():
         print(f"Sevkiyat POST hatası: {error_trace}")
         print(f"Hata detayı: {str(e)}")
         print(f"Request data: {data}")
+        print(f"Region: {region}")
+        print(f"Alan: {alan}")
         if conn:
             try:
                 conn.rollback()
-            except:
-                pass
-        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
+            except Exception as rollback_error:
+                print(f"Rollback hatası: {rollback_error}")
+        return jsonify({'message': f'Sevkiyat eklenirken bir hata oluştu: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn:
             try:
