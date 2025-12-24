@@ -1377,8 +1377,10 @@ def get_jti_scv_dizim_summary():
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
             # Eski versiyon gibi - diziAdedi None olabilir
-            if r['ortalamaAgirlik'] and r['diziAdedi']:
-                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
+            ortalamaAgirlik = r.get('ortalamaAgirlik') or 0
+            diziAdedi = r.get('diziAdedi') or 0
+            if ortalamaAgirlik and diziAdedi:
+                r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
