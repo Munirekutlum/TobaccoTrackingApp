@@ -6046,6 +6046,55 @@ def clear_all_data():
         if conn:
             conn.close()
 
+@app.route('/api/admin/clear-dizim-data', methods=['POST'])
+def clear_dizim_data():
+    """Tüm dizim kayıtlarını siler (dayıbaşı, günlük, ağırlık, yaprak)"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Dizim tablolarını temizle (foreign key sırasına göre)
+        tables = [
+            'jti_scv_dizim_yaprak',
+            'jti_scv_dizim_agirlik',
+            'jti_scv_dizim_gunluk',
+            'jti_scv_dizim_dayibasi_table',
+            'pmi_scv_dizim_yaprak',
+            'pmi_scv_dizim_agirlik',
+            'pmi_scv_dizim_gunluk',
+            'pmi_scv_dizim_dayibasi_table',
+            'pmi_topping_dizim_yaprak',
+            'pmi_topping_dizim_agirlik',
+            'pmi_topping_dizim_gunluk',
+            'pmi_topping_dizim_dayibasi_table'
+        ]
+        
+        deleted_counts = {}
+        for table in tables:
+            cursor.execute(f"DELETE FROM {table}")
+            deleted_counts[table] = cursor.rowcount
+        
+        conn.commit()
+        
+        return jsonify({
+            'message': 'Tüm dizim kayıtları başarıyla silindi.',
+            'deleted_counts': deleted_counts
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Dizim verileri silme hatası: {error_trace}")
+        if conn:
+            conn.rollback()
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
+    finally:
+        if conn:
+            conn.close()
+
 if __name__ == '__main__':
     print(" Veritabanı bağlantısı kontrol ediliyor...")
     if initialize_db():
