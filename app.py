@@ -2191,7 +2191,7 @@ def get_scv_seralar():
         if region:
             cursor.execute("SELECT * FROM scv_sera WHERE region = %s ORDER BY id DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
+            cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
