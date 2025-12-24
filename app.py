@@ -1376,6 +1376,7 @@ def get_jti_scv_dizim_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
+            # Eski versiyon gibi - diziAdedi None olabilir
             if r['ortalamaAgirlik'] and r['diziAdedi']:
                 r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
             else:
