@@ -2917,23 +2917,50 @@ def add_sevkiyat():
                     break
                 
                 kutular = izmir_row['kutular']
-                row_kutu = len([k for k in kutular if k and k > 0])
+                # Kutu sayısını hesapla - yeni format kontrolü
+                row_kutu = 0
+                for kutu in kutular:
+                    if isinstance(kutu, dict):
+                        # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                        row_kutu += kutu.get('adet', 0)
+                    else:
+                        # Eski format: sadece sayı
+                        if isinstance(kutu, (int, float)) and kutu > 0:
+                            row_kutu += 1
                 row_kg = izmir_row['kg']
                 
                 if row_kutu > 0 and row_kg > 0:
                     # Bu satırdan ne kadar düşeceğimizi hesapla
                     dusulecek_kutu = min(kalan_kutu, row_kutu)
-                    kutu_orani = dusulecek_kutu / row_kutu
+                    kutu_orani = dusulecek_kutu / row_kutu if row_kutu > 0 else 0
                     dusulecek_kg = min(kalan_kg, row_kg * kutu_orani)
                     
-                    # Kutuları güncelle
+                    # Kutuları güncelle - yeni format kontrolü
                     yeni_kutular = []
                     dusurulmus_kutu = 0
                     for kutu in kutular:
-                        if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
-                            dusurulmus_kutu += 1
+                        if isinstance(kutu, dict):
+                            # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                            kutu_adet = kutu.get('adet', 0)
+                            if kutu_adet > 0 and dusurulmus_kutu < dusulecek_kutu:
+                                kalan_adet = kutu_adet - min(kutu_adet, dusulecek_kutu - dusurulmus_kutu)
+                                dusurulmus_kutu += min(kutu_adet, dusulecek_kutu - dusurulmus_kutu)
+                                if kalan_adet > 0:
+                                    # Kalan adet varsa güncellenmiş kutu objesini ekle
+                                    yeni_kutu = kutu.copy()
+                                    yeni_kutu['adet'] = kalan_adet
+                                    # KG'yi de orantılı olarak güncelle
+                                    if kutu.get('toplam_kg', 0) > 0:
+                                        yeni_kutu['toplam_kg'] = kutu.get('toplam_kg', 0) * (kalan_adet / kutu_adet)
+                                    yeni_kutular.append(yeni_kutu)
+                            else:
+                                yeni_kutular.append(kutu)
                         else:
-                            yeni_kutular.append(kutu)
+                            # Eski format: sadece sayı
+                            if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
+                                dusurulmus_kutu += 1
+                            else:
+                                yeni_kutular.append(kutu)
                     
                     # Veritabanını güncelle
                     yeni_kg = max(0, row_kg - dusulecek_kg)
@@ -2953,23 +2980,50 @@ def add_sevkiyat():
                         break
                     
                     kutular = scv_row['kutular']
-                    row_kutu = len([k for k in kutular if k and k > 0])
+                    # Kutu sayısını hesapla - yeni format kontrolü
+                    row_kutu = 0
+                    for kutu in kutular:
+                        if isinstance(kutu, dict):
+                            # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                            row_kutu += kutu.get('adet', 0)
+                        else:
+                            # Eski format: sadece sayı
+                            if isinstance(kutu, (int, float)) and kutu > 0:
+                                row_kutu += 1
                     row_kg = scv_row['kg']
                     
                     if row_kutu > 0 and row_kg > 0:
                         # Bu satırdan ne kadar düşeceğimizi hesapla
                         dusulecek_kutu = min(kalan_kutu, row_kutu)
-                        kutu_orani = dusulecek_kutu / row_kutu
+                        kutu_orani = dusulecek_kutu / row_kutu if row_kutu > 0 else 0
                         dusulecek_kg = min(kalan_kg, row_kg * kutu_orani)
                         
-                        # Kutuları güncelle
+                        # Kutuları güncelle - yeni format kontrolü
                         yeni_kutular = []
                         dusurulmus_kutu = 0
                         for kutu in kutular:
-                            if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
-                                dusurulmus_kutu += 1
+                            if isinstance(kutu, dict):
+                                # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                                kutu_adet = kutu.get('adet', 0)
+                                if kutu_adet > 0 and dusurulmus_kutu < dusulecek_kutu:
+                                    kalan_adet = kutu_adet - min(kutu_adet, dusulecek_kutu - dusurulmus_kutu)
+                                    dusurulmus_kutu += min(kutu_adet, dusulecek_kutu - dusurulmus_kutu)
+                                    if kalan_adet > 0:
+                                        # Kalan adet varsa güncellenmiş kutu objesini ekle
+                                        yeni_kutu = kutu.copy()
+                                        yeni_kutu['adet'] = kalan_adet
+                                        # KG'yi de orantılı olarak güncelle
+                                        if kutu.get('toplam_kg', 0) > 0:
+                                            yeni_kutu['toplam_kg'] = kutu.get('toplam_kg', 0) * (kalan_adet / kutu_adet)
+                                        yeni_kutular.append(yeni_kutu)
+                                else:
+                                    yeni_kutular.append(kutu)
                             else:
-                                yeni_kutular.append(kutu)
+                                # Eski format: sadece sayı
+                                if kutu and kutu > 0 and dusurulmus_kutu < dusulecek_kutu:
+                                    dusurulmus_kutu += 1
+                                else:
+                                    yeni_kutular.append(kutu)
                         
                         # Veritabanını güncelle
                         yeni_kg = max(0, row_kg - dusulecek_kg)
@@ -4478,9 +4532,11 @@ def get_traktor_gelis_jti_kirim_summary():
             kart['agirliklar'] = agirliklar
             if agirliklar:
                 kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
+                # Toplam KG = Tüm ağırlıkların toplamı (ortalama * bohça değil!)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in agirliklar])
             else:
                 kart['ortalama_agirlik'] = 0
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+                kart['toplam_kg'] = 0
         return jsonify(kartlar)
     except Exception as e:
         import traceback
@@ -4726,9 +4782,11 @@ def get_traktor_gelis_pmi_kirim_summary():
             kart['agirliklar'] = agirliklar
             if agirliklar:
                 kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
+                # Toplam KG = Tüm ağırlıkların toplamı (ortalama * bohça değil!)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in agirliklar])
             else:
                 kart['ortalama_agirlik'] = 0
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+                kart['toplam_kg'] = 0
         return jsonify(kartlar)
     except Exception as e:
         import traceback
@@ -4974,9 +5032,11 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
             kart['agirliklar'] = agirliklar
             if agirliklar:
                 kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
+                # Toplam KG = Tüm ağırlıkların toplamı (ortalama * bohça değil!)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in agirliklar])
             else:
                 kart['ortalama_agirlik'] = 0
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+                kart['toplam_kg'] = 0
         return jsonify(kartlar)
     except Exception as e:
         import traceback
@@ -5226,9 +5286,11 @@ def get_traktor_gelis_izmir_kirim_summary():
             kart['agirliklar'] = agirliklar
             if agirliklar:
                 kart['ortalama_agirlik'] = sum([a['agirlik'] for a in agirliklar]) / len(agirliklar)
+                # Toplam KG = Tüm ağırlıkların toplamı (ortalama * bohça değil!)
+                kart['toplam_kg'] = sum([a['agirlik'] for a in agirliklar])
             else:
                 kart['ortalama_agirlik'] = 0
-            kart['toplam_kg'] = kart['toplam_bohca'] * kart['ortalama_agirlik']
+                kart['toplam_kg'] = 0
         return jsonify(kartlar)
     except Exception as e:
         import traceback
