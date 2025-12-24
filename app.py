@@ -1349,7 +1349,7 @@ def get_jti_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
@@ -1365,7 +1365,7 @@ def get_jti_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM jti_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
@@ -1376,14 +1376,8 @@ def get_jti_scv_dizim_summary():
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         for r in results:
-            ortalamaAgirlik = r.get('ortalamaAgirlik', 0) or 0
-            # diziAdedi 0 da geçerli bir değer olabilir, sadece null/None kontrolü yap
-            diziAdedi = r.get('diziAdedi')
-            if diziAdedi is None:
-                diziAdedi = 0
-            r['diziAdedi'] = diziAdedi  # Backend'de diziAdedi'yi koru (0 da geçerli)
-            if ortalamaAgirlik and diziAdedi:
-                r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
+            if r['ortalamaAgirlik'] and r['diziAdedi']:
+                r['toplamTahminiKg'] = r['ortalamaAgirlik'] * r['diziAdedi']
             else:
                 r['toplamTahminiKg'] = 0
             # İlk 10 agirlik ve yaprakSayisi
@@ -1523,12 +1517,9 @@ def add_or_update_jti_scv_dizim_gunluk():
     data = request.get_json()
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
-    region = data.get('region')
     yazici_adi = data.get('yazici_adi', '')  # yazici_adi opsiyonel, yoksa boş string
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
-    if not region:
-        return jsonify({'message': 'region parametresi zorunludur.'}), 400
     
     # Veri tipi dönüşümleri
     try:
@@ -1545,14 +1536,7 @@ def add_or_update_jti_scv_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        # Bölge kontrolü
-        cursor.execute("SELECT region FROM jti_scv_dizim_dayibasi_table WHERE id = %s", (dayibasi_id,))
-        dayibasi_region = cursor.fetchone()
-        if not dayibasi_region:
-            return jsonify({'message': 'Dayıbaşı kaydı bulunamadı.'}), 404
-        if dayibasi_region[0] != region:
-            return jsonify({'message': 'Bölge uyuşmazlığı: Bu dayıbaşı kaydı farklı bir bölgeye ait.'}), 403
-        # Kayıt var mı kontrol et
+        # Kayıt var mı kontrol et - ESKİ VERSİYON GİBİ
         cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
@@ -1615,7 +1599,7 @@ def get_pmi_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
@@ -1631,7 +1615,7 @@ def get_pmi_scv_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM pmi_scv_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
@@ -1878,7 +1862,7 @@ def get_pmi_topping_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
@@ -1894,7 +1878,7 @@ def get_pmi_topping_dizim_summary():
                     d.tarih,
                     d.dayibasi,
                     g.id as gunluk_id,
-                    COALESCE(g.diziAdedi, 0) as diziAdedi,
+                    g.diziAdedi,
                     g.yazici_adi,
                     COALESCE((SELECT COUNT(a.id) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as girilenAgirlikSayisi,
                     COALESCE((SELECT AVG(a.agirlik) FROM pmi_topping_dizim_agirlik a WHERE a.dayibasi_id = d.id), 0) as ortalamaAgirlik
