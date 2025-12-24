@@ -2801,7 +2801,7 @@ def add_sevkiyat():
         return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         alanlar = {}
         
         # SCV kutulama verilerini al - alan bazında ayrı ayrı grupla (bölge filtresi ile)
@@ -2809,8 +2809,7 @@ def add_sevkiyat():
         scv_rows = cursor.fetchall()
         
         for row in scv_rows:
-            row_alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
-            row_alan = row_alan.strip().upper()
+            row_alan = (row.get('alan') or '').strip().upper()
             
             # Alan adını normalize et
             if 'JTI' in row_alan and 'SCV' in row_alan:
@@ -2822,13 +2821,21 @@ def add_sevkiyat():
             else:
                 alan_key = row_alan
             
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
-            toplam_kg = row['toplam_kuru_kg'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_kg', 0) or 0
+            kutular_json = row.get('kutular')
+            toplam_kg = row.get('toplam_kuru_kg', 0) or 0
             
+            kutular_array = []
+            kutu_sayisi = 0
             try:
-                kutular_array = json.loads(kutular_json) if kutular_json else []
+                # Eğer kutular_json zaten bir list/dict ise, direkt kullan
+                if isinstance(kutular_json, (list, dict)):
+                    kutular_array = kutular_json
+                elif isinstance(kutular_json, str):
+                    kutular_array = json.loads(kutular_json) if kutular_json else []
+                else:
+                    kutular_array = []
+                
                 # Kutu sayısını hesapla - summary endpoint'indeki mantıkla aynı
-                kutu_sayisi = 0
                 for kutu in kutular_array:
                     if isinstance(kutu, dict):
                         # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
@@ -2837,7 +2844,9 @@ def add_sevkiyat():
                         # Eski format: sadece sayı
                         if isinstance(kutu, (int, float)) and kutu > 0:
                             kutu_sayisi += 1
-            except Exception:
+            except Exception as e:
+                print(f"Kutular parse hatası: {e}")
+                kutular_array = []
                 kutu_sayisi = 0
             
             if alan_key not in alanlar:
@@ -2846,7 +2855,7 @@ def add_sevkiyat():
             alanlar[alan_key]['kutu'] += kutu_sayisi
             alanlar[alan_key]['kg'] += toplam_kg
             alanlar[alan_key]['scv_rows'].append({
-                'id': row['id'] if isinstance(row, dict) else getattr(row, 'id'),
+                'id': row.get('id'),
                 'kutular': kutular_array,
                 'kg': toplam_kg,
                 'original_alan': row_alan  # Orijinal alan adını sakla güncelleme için
@@ -2870,20 +2879,38 @@ def add_sevkiyat():
         izmir_data = []
         
         for row in izmir_rows:
-            kutular_json = row['kutular'] if isinstance(row, dict) else getattr(row, 'kutular', None)
+            kutular_json = row.get('kutular')
+            kutular = []
+            row_kutu = 0
             try:
-                kutular = json.loads(kutular_json) if kutular_json else []
-                row_kutu = len([k for k in kutular if k and k > 0])
+                # Eğer kutular_json zaten bir list/dict ise, direkt kullan
+                if isinstance(kutular_json, (list, dict)):
+                    kutular = kutular_json
+                elif isinstance(kutular_json, str):
+                    kutular = json.loads(kutular_json) if kutular_json else []
+                else:
+                    kutular = []
+                
+                # Kutu sayısını hesapla - yeni format kontrolü
+                for kutu in kutular:
+                    if isinstance(kutu, dict):
+                        # Yeni format: {"adet": 5, "toplam_kg": 150}
+                        row_kutu += kutu.get('adet', 0)
+                    else:
+                        # Eski format: sadece sayı
+                        if isinstance(kutu, (int, float)) and kutu > 0:
+                            row_kutu += 1
                 izmir_kutu += row_kutu
-            except Exception:
+            except Exception as e:
+                print(f"İzmir kutular parse hatası: {e}")
                 kutular = []
                 row_kutu = 0
             
-            row_kg = row['toplam_kuru_tutun'] if isinstance(row, dict) else getattr(row, 'toplam_kuru_tutun', 0) or 0
+            row_kg = row.get('toplam_kuru_tutun', 0) or 0
             izmir_kg += row_kg
             
             izmir_data.append({
-                'id': row['id'] if isinstance(row, dict) else getattr(row, 'id'),
+                'id': row.get('id'),
                 'kutular': kutular,
                 'kg': row_kg
             })
@@ -2916,7 +2943,10 @@ def add_sevkiyat():
                 if kalan_kutu <= 0 and kalan_kg <= 0:
                     break
                 
-                kutular = izmir_row['kutular']
+                kutular = izmir_row.get('kutular', [])
+                # Eğer kutular bir list değilse, boş list yap
+                if not isinstance(kutular, list):
+                    kutular = []
                 # Kutu sayısını hesapla - yeni format kontrolü
                 row_kutu = 0
                 for kutu in kutular:
@@ -2979,7 +3009,10 @@ def add_sevkiyat():
                     if kalan_kutu <= 0 and kalan_kg <= 0:
                         break
                     
-                    kutular = scv_row['kutular']
+                    kutular = scv_row.get('kutular', [])
+                    # Eğer kutular bir list değilse, boş list yap
+                    if not isinstance(kutular, list):
+                        kutular = []
                     # Kutu sayısını hesapla - yeni format kontrolü
                     row_kutu = 0
                     for kutu in kutular:
@@ -3045,10 +3078,23 @@ def add_sevkiyat():
         return jsonify({'message': 'Sevkiyat kaydı başarıyla eklendi.'}), 201
         
     except Exception as e:
-        conn.rollback()
-        return jsonify({'message': f'Hata: {e}'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Sevkiyat POST hatası: {error_trace}")
+        print(f"Hata detayı: {str(e)}")
+        print(f"Request data: {data}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
-        conn.close()
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
 
 # Sevkiyat listesini getiren endpoint
 @app.route('/api/sevkiyat', methods=['GET'])
