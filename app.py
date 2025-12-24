@@ -1531,7 +1531,7 @@ def add_or_update_jti_scv_dizim_gunluk():
     data = request.get_json()
     dayibasi_id = data.get('dayibasi_id')
     diziAdedi = data.get('bohcaSayisi')  # frontend 'bohcaSayisi' gönderiyor, burada diziAdedi olarak kaydediyoruz
-    yazici_adi = data.get('yazici_adi', '')  # yazici_adi opsiyonel, yoksa boş string
+    yazici_adi = data.get('yazici_adi') or ''  # yazici_adi opsiyonel, None ise boş string
     if not dayibasi_id or diziAdedi is None:
         return jsonify({'message': 'dayibasi_id ve diziAdedi zorunludur.'}), 400
     
@@ -1550,7 +1550,7 @@ def add_or_update_jti_scv_dizim_gunluk():
     if not conn: return jsonify({'message': 'Veritabanı bağlantı hatası.'}), 500
     try:
         cursor = conn.cursor()
-        # Kayıt var mı kontrol et - ESKİ VERSİYON GİBİ
+        # Kayıt var mı kontrol et
         cursor.execute("SELECT id FROM jti_scv_dizim_gunluk WHERE dayibasi_id = %s", (dayibasi_id,))
         existing = cursor.fetchone()
         if existing:
@@ -1573,7 +1573,8 @@ def add_or_update_jti_scv_dizim_gunluk():
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
-        print(f"PMI Topping Dizim Summary hatası: {error_trace}")
+        print(f"JTI SCV Dizim gunluk hatası: {error_trace}")
+        conn.rollback()
         return jsonify({'message': f'Hata: {str(e)}', 'trace': error_trace}), 500
     finally:
         if conn: conn.close()
