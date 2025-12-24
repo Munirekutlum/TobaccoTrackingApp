@@ -2224,15 +2224,15 @@ def get_scv_sera_yerleri():
                 ORDER BY sera_yeri
             """, (region, region))
         else:
-        cursor.execute("""
-            SELECT DISTINCT sera_yeri 
-            FROM (
-                SELECT sera_yeri FROM scv_sera
-                UNION
-                SELECT sera_yeri FROM scv_sera_yerleri
-            ) combined_yerler
-            ORDER BY sera_yeri
-        """)
+            cursor.execute("""
+                SELECT DISTINCT sera_yeri 
+                FROM (
+                    SELECT sera_yeri FROM scv_sera
+                    UNION
+                    SELECT sera_yeri FROM scv_sera_yerleri
+                ) combined_yerler
+                ORDER BY sera_yeri
+            """)
         yerler = [row[0] for row in cursor.fetchall()]
         return jsonify(yerler)
     except Exception as e:
