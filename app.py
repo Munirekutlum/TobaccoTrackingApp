@@ -1549,11 +1549,12 @@ def add_or_update_jti_scv_dizim_gunluk():
         if existing:
             cursor.execute("UPDATE jti_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
-            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+            return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO jti_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            new_id = cursor.fetchone()[0]
             conn.commit()
-            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+            return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
@@ -1783,11 +1784,12 @@ def add_or_update_pmi_scv_dizim_gunluk():
         if existing:
             cursor.execute("UPDATE pmi_scv_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
-            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+            return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0], 'id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_scv_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            new_id = cursor.fetchone()[0]
             conn.commit()
-            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+            return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
@@ -2017,11 +2019,12 @@ def add_or_update_pmi_topping_dizim_gunluk():
         if existing:
             cursor.execute("UPDATE pmi_topping_dizim_gunluk SET diziAdedi = %s, yazici_adi = %s WHERE id = %s", (diziAdedi, data['yazici_adi'], existing[0]))
             conn.commit()
-            return jsonify({'message': 'Dizi adedi güncellendi.'}), 200
+            return jsonify({'message': 'Dizi adedi güncellendi.', 'gunluk_id': existing[0], 'id': existing[0]}), 200
         else:
-            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s)", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            cursor.execute("INSERT INTO pmi_topping_dizim_gunluk (dayibasi_id, diziAdedi, yazici_adi) VALUES (%s, %s, %s) RETURNING id", (dayibasi_id, diziAdedi, data['yazici_adi']))
+            new_id = cursor.fetchone()[0]
             conn.commit()
-            return jsonify({'message': 'Dizi adedi eklendi.'}), 201
+            return jsonify({'message': 'Dizi adedi eklendi.', 'gunluk_id': new_id, 'id': new_id}), 201
     except Exception as e:
         import traceback
         error_trace = traceback.format_exc()
