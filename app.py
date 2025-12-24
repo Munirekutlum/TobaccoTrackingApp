@@ -938,7 +938,7 @@ def get_fcv_genel_data():
         if region:
             cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel WHERE region = %s ORDER BY id DESC", (region,))
         else:
-        cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel ORDER BY id DESC")
+            cursor.execute("SELECT id, firinNo, tarla, turSayisi, gTarih, cTarih, yasKg, kuruKg, ortalama, koliSayisi, yakitToplam FROM fcv_genel ORDER BY id DESC")
         
         # Sütun adlarını al
         columns = [column[0] for column in cursor.description]
@@ -1607,7 +1607,7 @@ def get_pmi_scv_dizim_summary():
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
-        cursor.execute('''
+            cursor.execute('''
             SELECT 
                 d.id as dayibasi_id,
                 d.tarih,
@@ -1870,7 +1870,7 @@ def get_pmi_topping_dizim_summary():
         
         # SQL sorgusuna bölge filtresi ekle
         if region:
-        cursor.execute('''
+            cursor.execute('''
             SELECT 
                 d.id as dayibasi_id,
                 d.tarih,
@@ -2217,7 +2217,7 @@ def get_scv_seralar():
         if region:
             cursor.execute("SELECT * FROM scv_sera WHERE region = %s ORDER BY id DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
+            cursor.execute("SELECT * FROM scv_sera ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -2250,7 +2250,7 @@ def get_scv_sera_yerleri():
                 ORDER BY sera_yeri
             """, (region, region))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT DISTINCT sera_yeri 
             FROM (
                 SELECT sera_yeri FROM scv_sera
@@ -2281,7 +2281,7 @@ def get_scv_sera_nolar():
         if region:
             cursor.execute("SELECT DISTINCT sera_no FROM scv_sera WHERE region = %s ORDER BY sera_no", (region,))
         else:
-        cursor.execute("SELECT DISTINCT sera_no FROM scv_sera ORDER BY sera_no")
+            cursor.execute("SELECT DISTINCT sera_no FROM scv_sera ORDER BY sera_no")
         nolar = [row[0] for row in cursor.fetchall()]
         return jsonify(nolar)
     except Exception as e:
@@ -2347,7 +2347,7 @@ def get_scv_sera_yerleri_detay():
                 ORDER BY sy.sera_yeri
             """, (region, region))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT sy.sera_yeri, sy.toplam_sera_sayisi, 
                    COUNT(s.id) as mevcut_sera_sayisi
             FROM scv_sera_yerleri sy
@@ -2423,7 +2423,7 @@ def get_scv_kutulama():
         if region:
             cursor.execute("SELECT * FROM scv_kutulama WHERE region = %s ORDER BY tarih DESC, id DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM scv_kutulama ORDER BY tarih DESC, id DESC")
+            cursor.execute("SELECT * FROM scv_kutulama ORDER BY tarih DESC, id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -2477,7 +2477,7 @@ def get_scv_kutulama_summary():
         if region:
             cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama WHERE region = %s", (region,))
         else:
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         kutulama_kayitlari = cursor.fetchall()
         
         # İstatistikleri tutacak sözlükler
@@ -2671,7 +2671,7 @@ def get_alan_stok():
         if region:
             cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama WHERE region = %s", (region,))
         else:
-        cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
+            cursor.execute("SELECT alan, kutular, toplam_kuru_kg FROM scv_kutulama")
         scv_rows = cursor.fetchall()
         
         for row in scv_rows:
@@ -2712,7 +2712,7 @@ def get_alan_stok():
             else:
                 cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
+            cursor.execute("SELECT kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -2831,7 +2831,7 @@ def add_sevkiyat():
             else:
                 cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
+            cursor.execute("SELECT id, kutular, toplam_kuru_tutun FROM izmir_kutulama")
         izmir_rows = cursor.fetchall()
         
         izmir_kutu = 0
@@ -2978,7 +2978,7 @@ def get_sevkiyat():
         if region:
             cursor.execute("SELECT * FROM sevkiyat WHERE region = %s ORDER BY created_at DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM sevkiyat ORDER BY created_at DESC")
+            cursor.execute("SELECT * FROM sevkiyat ORDER BY created_at DESC")
         rows = cursor.fetchall()
         
         sevkiyatlar = []
@@ -3086,7 +3086,7 @@ def get_genel_stok():
                 WHERE ta.agirlik > 0 AND t.region = %s
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                 COALESCE(SUM(ta.agirlik), 0) as kg, 
                 COALESCE(SUM(td.bohca_sayisi), 0) as bohca
@@ -3114,7 +3114,7 @@ def get_genel_stok():
                 WHERE ta.agirlik > 0 AND t.region = %s
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                 COALESCE(SUM(ta.agirlik), 0) as kg, 
                 COALESCE(SUM(td.bohca_sayisi), 0) as bohca
@@ -3170,7 +3170,7 @@ def get_genel_stok():
                 WHERE a.agirlik > 0 AND d.region = %s
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                     COALESCE(SUM(a.agirlik), 0) as kg
             FROM jti_scv_dizim_gunluk g
@@ -3294,14 +3294,14 @@ def get_genel_stok():
         if region:
             cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0 AND region = %s", (region,))
         else:
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_kg), 0) as kg FROM scv_kutulama WHERE toplam_kuru_kg > 0")
         scv_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['SCV']['kutulama_kg'] += float(scv_kutulama_kg)
 
         if region:
             cursor.execute("SELECT kutular FROM scv_kutulama WHERE region = %s", (region,))
         else:
-        cursor.execute("SELECT kutular FROM scv_kutulama")
+            cursor.execute("SELECT kutular FROM scv_kutulama")
         scv_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['SCV']['kutulama_kutu'] += int(scv_kutu_sayisi)
         # SCV alt departmanlar için kutulama verisi alt ayrımı olmadığı için paylaşılmıyor (0 bırakıldı)
@@ -3320,7 +3320,7 @@ def get_genel_stok():
                 WHERE ta.agirlik > 0 AND t.region = %s
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                 COALESCE(SUM(ta.agirlik), 0) as kg, 
                 COALESCE(SUM(td.bohca_sayisi), 0) as bohca
@@ -3355,7 +3355,7 @@ def get_genel_stok():
                     WHERE a.agirlik > 0
                 """)
         except:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                     COALESCE(SUM(a.agirlik), 0) as kg
             FROM izmir_dizim_gunluk g
@@ -3403,7 +3403,7 @@ def get_genel_stok():
             else:
                 cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
         except:
-        cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
+            cursor.execute("SELECT COALESCE(SUM(toplam_kuru_tutun), 0) as kg FROM izmir_kutulama WHERE toplam_kuru_tutun > 0")
         izmir_kutulama_kg = cursor.fetchone()[0]
         result['toplamlar']['IZMIR']['kutulama_kg'] = float(izmir_kutulama_kg)
 
@@ -3415,7 +3415,7 @@ def get_genel_stok():
             else:
                 cursor.execute("SELECT kutular FROM izmir_kutulama")
         except:
-        cursor.execute("SELECT kutular FROM izmir_kutulama")
+            cursor.execute("SELECT kutular FROM izmir_kutulama")
         izmir_kutu_sayisi = sum(len(json.loads(row[0] or '[]')) for row in cursor.fetchall())
         result['toplamlar']['IZMIR']['kutulama_kutu'] = int(izmir_kutu_sayisi)
 
@@ -3432,7 +3432,7 @@ def get_genel_stok():
                 WHERE fa.agirlik > 0 AND fg.region = %s
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT 
                 COALESCE(SUM(fa.agirlik), 0) as kg, 
                 COALESCE(SUM(fg.bocaSayisi), 0) as bohca
@@ -3448,7 +3448,7 @@ def get_genel_stok():
         if region:
             cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0 AND region = %s", (region,))
         else:
-        cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0")
+            cursor.execute("SELECT COALESCE(SUM(kuruKg), 0) as kg, COALESCE(SUM(koliSayisi), 0) as kutu FROM fcv_genel WHERE kuruKg > 0")
         fcv_kutulama = cursor.fetchone()
         result['toplamlar']['FCV']['kutulama_kg'] = float(fcv_kutulama[0])
         result['toplamlar']['FCV']['kutulama_kutu'] = int(fcv_kutulama[1])
@@ -4435,7 +4435,7 @@ def get_traktor_gelis_jti_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_jti_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_jti_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_jti_kirim_dayibasi WHERE traktor_gelis_jti_kirim_id = %s", (kart['id'],))
@@ -4683,7 +4683,7 @@ def get_traktor_gelis_pmi_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_kirim_dayibasi WHERE traktor_gelis_pmi_kirim_id = %s", (kart['id'],))
@@ -4931,7 +4931,7 @@ def get_traktor_gelis_pmi_topping_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_pmi_topping_kirim_dayibasi WHERE traktor_gelis_pmi_topping_kirim_id = %s", (kart['id'],))
@@ -5001,7 +5001,7 @@ def get_traktor_gelis_izmir_kirim():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY id DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY id DESC")
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return jsonify(results)
@@ -5183,7 +5183,7 @@ def get_traktor_gelis_izmir_kirim_summary():
         if region:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim WHERE region = %s ORDER BY tarih DESC, plaka, gelis_no DESC", (region,))
         else:
-        cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
+            cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim ORDER BY tarih DESC, plaka, gelis_no DESC")
         kartlar = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
         for kart in kartlar:
             cursor.execute("SELECT * FROM traktor_gelis_izmir_kirim_dayibasi WHERE traktor_gelis_izmir_kirim_id = %s", (kart['id'],))
@@ -5410,7 +5410,7 @@ def get_traktor_gelis_izmir_kirim_summary_with_sergi():
                 ORDER BY tarih DESC, plaka, gelis_no DESC
             """, (region,))
         else:
-        cursor.execute("""
+            cursor.execute("""
             SELECT id, tarih, plaka, gelis_no 
             FROM traktor_gelis_izmir_kirim 
             ORDER BY tarih DESC, plaka, gelis_no DESC
