@@ -1396,10 +1396,11 @@ def get_jti_scv_dizim_summary():
             else:
                 r['diziAdedi'] = None
             
-            # Tahmini toplam hesapla
+            # Tahmini toplam hesapla: Ortalama Ağırlık × Dizi Adedi
             ortalamaAgirlik = r.get('ortalamaAgirlik') or 0
-            diziAdedi = r.get('diziAdedi') or 0
-            if ortalamaAgirlik and diziAdedi:
+            diziAdedi = r.get('diziAdedi')
+            # diziAdedi None değilse ve 0'dan büyükse hesapla
+            if ortalamaAgirlik and ortalamaAgirlik > 0 and diziAdedi is not None and diziAdedi > 0:
                 r['toplamTahminiKg'] = float(ortalamaAgirlik) * float(diziAdedi)
             else:
                 r['toplamTahminiKg'] = 0
@@ -2817,7 +2818,16 @@ def add_sevkiyat():
             
             try:
                 kutular_array = json.loads(kutular_json) if kutular_json else []
-                kutu_sayisi = len([k for k in kutular_array if k and k > 0])
+                # Kutu sayısını hesapla - summary endpoint'indeki mantıkla aynı
+                kutu_sayisi = 0
+                for kutu in kutular_array:
+                    if isinstance(kutu, dict):
+                        # Yeni format: {"alan": "pmi-scv", "toplam_kg": 150, "adet": 5}
+                        kutu_sayisi += kutu.get('adet', 0)
+                    else:
+                        # Eski format: sadece sayı
+                        if isinstance(kutu, (int, float)) and kutu > 0:
+                            kutu_sayisi += 1
             except Exception:
                 kutu_sayisi = 0
             
