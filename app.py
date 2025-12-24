@@ -3427,6 +3427,62 @@ def get_genel_stok():
         result['toplamlar']['FCV']['kutulama_kg'] = float(fcv_kutulama[0])
         result['toplamlar']['FCV']['kutulama_kutu'] = int(fcv_kutulama[1])
 
+        # === SEVKİYAT VERİLERİ ===
+        # Sevkiyat verilerini alan bazında topla
+        sevkiyat_toplamlari = {
+            'JTI SCV': 0,
+            'PMI SCV': 0,
+            'PMI TOPPING': 0,
+            'İZMİR': 0,
+            'IZMIR': 0
+        }
+        
+        if region:
+            cursor.execute("""
+                SELECT alan, COALESCE(SUM(kutu), 0) as toplam_kutu
+                FROM sevkiyat
+                WHERE region = %s
+                GROUP BY alan
+            """, (region,))
+        else:
+            cursor.execute("""
+                SELECT alan, COALESCE(SUM(kutu), 0) as toplam_kutu
+                FROM sevkiyat
+                GROUP BY alan
+            """)
+        
+        sevkiyat_rows = cursor.fetchall()
+        for row in sevkiyat_rows:
+            alan = (row['alan'] if isinstance(row, dict) else getattr(row, 'alan', None)) or ''
+            kutu = row['toplam_kutu'] if isinstance(row, dict) else getattr(row, 'toplam_kutu', 0) or 0
+            
+            # Alan adını normalize et
+            alan_upper = alan.strip().upper()
+            if 'JTI' in alan_upper and 'SCV' in alan_upper:
+                sevkiyat_toplamlari['JTI SCV'] += int(kutu)
+            elif 'PMI' in alan_upper and 'SCV' in alan_upper:
+                sevkiyat_toplamlari['PMI SCV'] += int(kutu)
+            elif 'PMI' in alan_upper and 'TOPPING' in alan_upper:
+                sevkiyat_toplamlari['PMI TOPPING'] += int(kutu)
+            elif 'İZMİR' in alan_upper or 'IZMIR' in alan_upper:
+                sevkiyat_toplamlari['İZMİR'] += int(kutu)
+                sevkiyat_toplamlari['IZMIR'] += int(kutu)
+        
+        # Sevkiyat verilerini result'a ekle
+        result['sevkiyat'] = {
+            'JTI_SCV': sevkiyat_toplamlari['JTI SCV'],
+            'PMI_SCV': sevkiyat_toplamlari['PMI SCV'],
+            'SCV_TOPPING': sevkiyat_toplamlari['PMI TOPPING'],
+            'IZMIR': sevkiyat_toplamlari['İZMİR'] + sevkiyat_toplamlari['IZMIR']
+        }
+        
+        # SCV genel sevkiyat toplamı
+        result['sevkiyat']['SCV'] = (
+            sevkiyat_toplamlari['JTI SCV'] + 
+            sevkiyat_toplamlari['PMI SCV'] + 
+            sevkiyat_toplamlari['PMI TOPPING']
+        )
+
         # === GENEL TOPLAMLAR ===
         result['genel_toplam'] = {
             'kirim_kg': round(result['toplamlar']['SCV']['kirim_kg'] + result['toplamlar']['IZMIR']['kirim_kg'] + result['toplamlar']['FCV']['kirim_kg'], 2),
